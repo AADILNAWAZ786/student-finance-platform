@@ -96,10 +96,26 @@ ALLOCATION_LIST_ERRORS = list_error_responses(invalid_choice("allocation_type", 
 
 REFUND_LIST_ERRORS = list_error_responses(invalid_choice("status", "PAID"))
 REFUND_404 = not_found("Refund")
-REFUND_CREATE_400 = (
-    "Reason other than OVERPAYMENT",
-    err("VALIDATION_ERROR", INVALID, {"reason": ['"WITHDRAWAL" is not a valid choice.']}),
-)
+REFUND_CREATE_400 = [
+    (
+        "WITHDRAWAL without enrollment_id",
+        err(
+            "VALIDATION_ERROR", INVALID, {"enrollment_id": ["Required when reason is WITHDRAWAL."]}
+        ),
+    ),
+    (
+        "WITHDRAWAL for an enrollment still ENROLLED",
+        err(
+            "VALIDATION_ERROR",
+            INVALID,
+            {
+                "enrollment_id": [
+                    "ENR-2026-000001 is ENROLLED; a WITHDRAWAL refund needs a WITHDRAWN enrollment."
+                ]
+            },
+        ),
+    ),
+]
 
 
 def _caps(amount, net_paid, ledger, credit, pending, credit_available, available, maximum):

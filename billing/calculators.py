@@ -286,11 +286,15 @@ def invoice_amounts(lines, scholarship_allocations, payment_allocations) -> Invo
 
     ``lines`` have ``line_type`` and ``net_amount``; allocations have ``amount`` and, for
     payment allocations, ``payer_type``. Every payer counts as money paid (BR-PAY-03).
+    ``payments_by_payer`` lists the payers that have payment allocations on the invoice (as
+    the frozen §7 worked-example test expects); API serializers show 0.00 for the others.
     """
     lines = list(lines)
     payment_allocations = list(payment_allocations)
     by_payer = {
-        p: dsum(a.amount for a in payment_allocations if a.payer_type == p) for p in PAYER_TYPES
+        p: dsum(a.amount for a in payment_allocations if a.payer_type == p)
+        for p in PAYER_TYPES
+        if any(a.payer_type == p for a in payment_allocations)
     }
     return InvoiceAmounts(
         original_charges=dsum(
@@ -377,6 +381,115 @@ def void_adjustments(lines) -> tuple[VoidAdjustment, ...]:
                 )
             )
     return tuple(out)
+
+
+# --- withdrawals and cancellations (BR-WDR-01..03, BR-SCH-07) ----------------------------------
+
+
+@dataclass(frozen=True)
+class ExitAdjustment:
+    """One ADJUSTMENT to post for a withdrawal or cancellation."""
+
+    adjusts_line_id: str
+    fee_type: str
+    line_net: Decimal  # N: the line's current net (net + earlier adjustments), D-W3
+    amount: Decimal  # A: negative
+    allocation_priority: int
+
+
+def _current_nets(lines) -> dict[str, Decimal]:
+    return line_open_amounts(list(lines))  # no allocations: net + Σ its adjustments
+
+
+def withdrawal_adjustments(lines, pct) -> tuple[ExitAdjustment, ...]:
+    """BR-WDR-02: −round_half_up(N × pct) on every refundable FEE / LATE_FEE line
+    (``is_refundable``: TUITION, LAB) with N > 0. A zero adjustment is never created."""
+    lines = list(lines)
+    nets, pct = _current_nets(lines), to_decimal(pct)
+    out = []
+    for line in sorted(lines, key=lambda x: x.line_id):
+        if line.line_type not in ("FEE", "LATE_FEE") or not line.is_refundable:
+            continue
+        n = nets[line.line_id]
+        if n > 0:
+            amount = -round_money(n * pct)
+            if amount != 0:
+                out.append(
+                    ExitAdjustment(line.line_id, line.fee_type, n, amount, line.allocation_priority)
+                )
+    return tuple(out)
+
+
+def cancellation_adjustments(lines) -> tuple[ExitAdjustment, ...]:
+    """BR-WDR-01: −N on every FEE / LATE_FEE line except REGISTRATION (non-refundable) with
+    N > 0, so only registration stays owed."""
+    lines = list(lines)
+    nets = _current_nets(lines)
+    out = []
+    for line in sorted(lines, key=lambda x: x.line_id):
+        if line.line_type not in ("FEE", "LATE_FEE") or line.fee_type == "REGISTRATION":
+            continue
+        n = nets[line.line_id]
+        if n > 0:
+            out.append(ExitAdjustment(line.line_id, line.fee_type, n, -n, line.allocation_priority))
+    return tuple(out)
+
+
+@dataclass(frozen=True)
+class ReleasePlan:
+    """BR-WDR-03 result for one adjusted line.
+
+    ``scholarship_reversal`` (R ≥ 0) is reversed first; ``deallocations`` are
+    (allocation_id, amount > 0) in LIFO order; ``excess`` = (S − R) + P − N' (≤ 0: none).
+    """
+
+    scholarship_reversal: Decimal
+    deallocations: tuple[tuple[str, Decimal], ...]
+    line_net: Decimal = ZERO
+    adjustment: Decimal = ZERO
+    reduced_net: Decimal = ZERO
+    scholarship_allocated: Decimal = ZERO
+    payments_allocated: Decimal = ZERO
+    excess: Decimal = ZERO
+
+
+def release_for_adjustment(
+    *, line_net, adjustment, scholarship_allocated, payment_allocations
+) -> ReleasePlan:
+    """BR-WDR-03 / BR-SCH-07: what to release when ``adjustment`` (A ≤ 0) is posted on a line
+    whose net before it is ``line_net`` (N).
+
+    Step 1, scholarship first: R = min(S, max(round_half_up(S × |A| / N), S − N')).
+    Step 2, then payments: excess = (S − R) + P − N'; if > 0 it is deallocated from
+    ``payment_allocations`` (objects with ``allocation_id``, ``allocated_on`` and ``amount``,
+    the net still allocated) last-in-first-out by (allocated_on, allocation_id) descending.
+
+    Raises ``ValueError`` if A > 0, |A| > N, or the allocations hold less than the excess.
+    """
+    n, a, s = to_decimal(line_net), to_decimal(adjustment), to_decimal(scholarship_allocated)
+    allocations = [x for x in payment_allocations if to_decimal(x.amount) > 0]
+    p = dsum(x.amount for x in allocations)
+    if a > 0:
+        raise ValueError(f"adjustment must be ≤ 0, got {a}")
+    if -a > n:
+        raise ValueError(f"|adjustment| {-a} exceeds the line net {n}")
+    reduced = round_money(n + a)
+    if a == 0:
+        return ReleasePlan(ZERO, (), n, a, reduced, s, p, ZERO)
+    proportional = round_money(s * (-a) / n)
+    reversal = max(ZERO, min(s, max(proportional, s - reduced)))
+    excess = round_money((s - reversal) + p - reduced)
+    deallocations: list[tuple[str, Decimal]] = []
+    remaining = excess
+    for x in sorted(allocations, key=lambda x: (x.allocated_on, x.allocation_id), reverse=True):
+        if remaining <= 0:
+            break
+        take = min(round_money(x.amount), remaining)
+        deallocations.append((x.allocation_id, take))
+        remaining = round_money(remaining - take)
+    if remaining > 0:
+        raise ValueError(f"payment allocations hold {p}, less than the excess {excess}")
+    return ReleasePlan(reversal, tuple(deallocations), n, a, reduced, s, p, excess)
 
 
 # --- ledger (BR-LED-01 / BR-BAL-01) ------------------------------------------------------------

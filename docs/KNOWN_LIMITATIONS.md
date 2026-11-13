@@ -1,7 +1,7 @@
-# Known limitations (unresolved) and Phase 2–4 policy decisions
+# Known limitations (unresolved) and Phase 2–5 policy decisions
 
-Status as of the Phase 4 (payments and refunds) delivery (2026-11-13). L1 and L2 are **not
-implemented**.
+Status as of the Phase 5 (withdrawals and cancellations) delivery (2026-11-14). L1 and L2 are
+**not implemented**.
 The frozen design documents (`ARCHITECTURE.md`, `DATABASE_DESIGN.md` v1.1) are unchanged;
 resolving L1/L2 needs a design decision by the project owner.
 
@@ -12,7 +12,8 @@ resolving L1/L2 needs a design decision by the project owner.
   `Student`, so the API cannot tell which student record belongs to a learner.
 - **Current behaviour (tested, passing):** users in the `learner` group get
   `403 PERMISSION_DENIED` on every students, programs, terms and enrollments endpoint, and
-  (Phases 2–4) on every billing, scholarship, payment and refund endpoint, including
+  (Phases 2–5) on every billing, scholarship, payment and refund endpoint and on
+  withdraw / cancel, including
   `/students/{id}/statement/`, `/balance/` and `/refundable/`.
 - **Test:** `tests/verification/test_verify_security.py::test_design_learner_reads_own_record`
   is marked `xfail(strict=True)`. It reports as **XFAIL** until the rule is implemented. If
@@ -30,6 +31,41 @@ resolving L1/L2 needs a design decision by the project owner.
 **Resolving L1 and L2** needs a model addition, for example an optional one-to-one
 `Student.user` and an instructor↔program bridge table. That changes the frozen design, so it
 was not done in Phase 1.
+
+## Phase 5 policy decisions (approved before implementation)
+
+| # | Decision | Implemented as |
+|---|---|---|
+| D-W1 | Where withdrawals are orchestrated (**Option A**) | `academics.services.withdraw_enrollment` / `cancel_enrollment` stay the entry points. Academics runs the exit handlers registered in `academics/exits.py` (billing registers `billing.withdrawals.apply_enrollment_exit`); billing drives the scholarship reversal and the payment release through two adjustment handlers registered in `billing/allocations.py` by scholarships and payments. No new import edge; resolves D-S17 (`test_exit_orchestration_uses_registries_only`). |
+| D-W2 | Reconciliation balance helper | `reconciliation.calculators.balance_from_ledger(entries, as_of=None)`, a thin wrapper around `billing.calculators.ledger_balance`. Nothing else from Phase 6. |
+| D-W3 | N in BR-WDR-02/03 | The line's current net after any earlier adjustments (`billing.calculators._current_nets`). |
+| D-W4 | Splitting R across several scholarship allocations on one line | Proportional to each allocation's remaining amount; largest-remainder rounding to the cent, ties by `allocation_id`; the parts sum exactly to R (`scholarships.calculators.split_reversal`). |
+| D-W5 | Who may withdraw / cancel (**Option B**) | `platform_admin` and `academic_admin`. Only `platform_admin` (and superusers, P5-O4) receive `invoice` (amounts, statuses, release plan) and `refund_quote`; for an academic admin both keys are absent, not null, and `financial_details_included` is false. Everyone else: 403. |
+| D-W6 | Refunds after an exit | Never automatic: the exit returns a refund quote only. `POST /refunds/` now accepts reason WITHDRAWAL / CANCELLATION with a required `enrollment_id` of the same student whose status is WITHDRAWN / CANCELLED respectively (OVERPAYMENT must omit it). The existing three caps apply unchanged; `calculation.schedule_pct` records the BR-WDR-02 fraction for WITHDRAWAL. Supersedes D-P14. |
+| D-W7 | No invoice / VOID invoice | Enrollment transition only; `invoice: null` (platform admins). |
+| D-W8 | Dates | Term bounds, `enrolled_on` and the existing deallocation date rule (on or after each row's `allocated_on`). No rule that the exit must follow every posting, status or allocation date. One narrow check was needed so no row predates what it adjusts: see P5-O2. |
+| D-W9 | Student status, unapplied awards | Unchanged. |
+
+## Phase 5 observations
+
+| # | Observation | Current behaviour |
+|---|---|---|
+| P5-O1 | **Conflict with Phase 2 behaviour:** the frozen `tests/unit/test_worked_example.py` (runnable since Phase 5) expects `invoice_amounts(...).payments_by_payer` to list only payers with allocations; Phase 2 listed all three with zeros. | The calculator now lists present payers only. API output is unchanged: the serializers still fill 0.00 for the missing payers. |
+| P5-O2 | An exit dated before an adjusted line's `posted_date` would create an ADJUSTMENT older than its own line. | 400 on `withdrawal_date` / `cancellation_date`. Reachable for a cancellation dated after `enrolled_on` but before the invoice's issue date, or an exit dated before a late fee's posting; every other date follows D-W8. |
+| P5-O3 | `scholarships.services.reverse_for_adjustment` (the exit path) checks the exit date against each reversed allocation's `allocated_on`, not Phase 3's `_latest_invoice_date` rule used by the manual `reverse_allocation`. | Deliberate, per D-W8; `reverse_allocation` keeps its Phase 3 rule unchanged. |
+| P5-O4 | Superusers pass every role check, so they receive financial details like `platform_admin`. | As in every earlier phase; no superuser exists unless created deliberately. |
+| P5-O5 | A WITHDRAWAL / CANCELLATION refund's `requested_date` is not tied to the exit date. | The existing refund date rules apply; no new bound was approved. |
+| P5-O6 | OpenAPI: the `RefundRequestReasonEnum` override (OVERPAYMENT only) was removed. | `POST /refunds/` documents `reason` with the shared `RefundReasonEnum` (all three). |
+| P5-O7 | A Phase 2 unit test asserted that `release_for_adjustment` did not exist yet (D12 placeholder). | Renamed `test_release_for_adjustment_arrived_in_phase_5`, asserting it exists. |
+| P5-O8 | The deferred acceptance tests `test_withdrawal_refund_pct.py`, `test_withdrawal_release.py` and `test_worked_example.py` import and pass. | D-P19 resolved; only `test_stage_rng.py` (datagen, Phase 7) remains deferred. |
+| P5-O9 | The collection status is recalculated once, after every write of an exit. | Intermediate states (adjustment written, payment not yet released) would have a negative outstanding, which `check_amounts` rejects. |
+
+## Defects found and fixed during Phase 5 implementation (before delivery)
+
+| # | Defect | Fixed in |
+|---|---|---|
+| P5-B1 | The adjustment builders looked up a line's net before filtering out non-FEE / LATE_FEE lines (KeyError on an invoice with an earlier adjustment). | `billing/calculators.py`; found by `tests/unit/test_withdrawal_calculators.py`. |
+| P5-B2 | An academic admin received `"invoice": null, "refund_quote": null`: DRF renders a missing `allow_null` field as null instead of skipping it. | `academics/views.py::_exit_body` drops both keys after serialization; found by `tests/api/test_api_withdrawals.py`. |
 
 ## Phase 4 policy decisions (approved before implementation, plan revision 2)
 

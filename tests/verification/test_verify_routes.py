@@ -1,4 +1,4 @@
-"""V-ROUTE: every Phase 1, 2, 3 and 4 URL × every HTTP method (actual routes from the URL resolver).
+"""V-ROUTE: every Phase 1–5 URL × every HTTP method (actual routes from the URL resolver).
 
 Allowed methods must not return 405; every other method must return the documented
 405 envelope with an ``Allow`` header. Unknown or malformed URLs under /api/ must also
@@ -60,6 +60,9 @@ ROUTES = [
     ("refund-process", f"/api/v1/refunds/{REF}/process/", {"POST"}),
     ("refund-reject", f"/api/v1/refunds/{REF}/reject/", {"POST"}),
     ("student-refundable", "/api/v1/students/STU-000001/refundable/", {"GET"}),
+    # Phase 5: withdrawals and cancellations (actions on an enrollment)
+    ("enrollment-withdraw", "/api/v1/enrollments/ENR-2026-000001/withdraw/", {"POST"}),
+    ("enrollment-cancel", "/api/v1/enrollments/ENR-2026-000001/cancel/", {"POST"}),
 ]
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 DISALLOWED = [
@@ -97,7 +100,8 @@ def test_route_table_matches_resolver():
                 yield prefix + str(p.pattern)
 
     api = sorted(r for r in walk(get_resolver()) if r.startswith("api/v1/"))
-    assert len(api) == len(ROUTES) == 40  # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11
+    # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11, Phase 5: +2
+    assert len(api) == len(ROUTES) == 42
 
 
 @pytest.mark.parametrize(

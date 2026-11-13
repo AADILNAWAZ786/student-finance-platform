@@ -5,6 +5,7 @@ are rejected), so a client can never send a server-controlled value such as ``st
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from academics.models import Enrollment
 from billing.models import InvoiceLine
 from core.fields import MoneyField
 from core.money import dsum
@@ -327,11 +328,51 @@ class RefundCreateSerializer(StrictInputMixin, serializers.Serializer):
     amount = MoneyField(validators=[_positive])
     requested_date = serializers.DateField(help_text="On or after the payment's received_date")
     reason = serializers.ChoiceField(
-        choices=[(r, r) for r in policy.API_REFUND_REASONS],
+        choices=Refund.Reason.choices,
         required=False,
         default=policy.OVERPAYMENT,
-        help_text="OVERPAYMENT (withdrawal and cancellation refunds arrive with Phase 5)",
+        help_text="OVERPAYMENT (default), or WITHDRAWAL / CANCELLATION with enrollment_id",
     )
+    enrollment_id = serializers.PrimaryKeyRelatedField(
+        queryset=Enrollment.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Required for WITHDRAWAL (a WITHDRAWN enrollment) and CANCELLATION (a "
+        "CANCELLED one) of the payment's student; omitted for OVERPAYMENT",
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        reason, enrollment = attrs.get("reason", policy.OVERPAYMENT), attrs.get("enrollment_id")
+        if reason in policy.ENROLLMENT_REFUND_REASONS:
+            needed = {policy.WITHDRAWAL: "WITHDRAWN", policy.CANCELLATION: "CANCELLED"}[reason]
+            if enrollment is None:
+                raise serializers.ValidationError(
+                    {"enrollment_id": [f"Required when reason is {reason}."]}
+                )
+            if enrollment.student_id != attrs["payment_id"].student_id:
+                raise serializers.ValidationError(
+                    {
+                        "enrollment_id": [
+                            f"{enrollment.pk} belongs to another student than "
+                            f"{attrs['payment_id'].pk}."
+                        ]
+                    }
+                )
+            if enrollment.status != needed:
+                raise serializers.ValidationError(
+                    {
+                        "enrollment_id": [
+                            f"{enrollment.pk} is {enrollment.status}; a {reason} refund needs a "
+                            f"{needed} enrollment."
+                        ]
+                    }
+                )
+        elif enrollment is not None:
+            raise serializers.ValidationError(
+                {"enrollment_id": [f"Must be omitted when reason is {reason}."]}
+            )
+        return attrs
 
 
 class RefundStatusDateSerializer(StrictInputMixin, serializers.Serializer):

@@ -17,7 +17,18 @@ it never imports them. Instead they register here from their ``AppConfig.ready()
       - ``student_credit``: ``fn(student, as_of=None) -> Decimal``, the BR-BAL-02
         unallocated credit computed from payment rows (Σ payments − Σ net payment
         allocations − Σ PROCESSED refunds, each dated on or before ``as_of``);
-      - ``refunds``: ``fn(student) -> list`` of the student's refunds, for statements.
+      - ``refunds``: ``fn(student) -> list`` of the student's refunds, for statements;
+      - ``refund_quote``: ``fn(student) -> dict``, the refundable summary returned with a
+        withdrawal or cancellation (Phase 5).
+  * **adjustment handlers** (Phase 5, BR-WDR-03), exactly one per kind, used by
+    ``billing.withdrawals`` when a withdrawal or cancellation adjusts a line:
+      - ``scholarship_reversal`` (scholarships): ``fn(*, invoice_line_id, amount, reason,
+        on_date, actor, source_ref) -> list`` reverses ``amount`` of the line's scholarship
+        allocations (BR-SCH-07, split by decision D-W4);
+      - ``payment_release`` (payments): ``fn(*, deallocations, rule, on_date, date_field,
+        actor, source_ref) -> list`` deallocates [(allocation_id, amount)] (LIFO plan
+        computed by billing). Neither refreshes the collection status: billing does it once,
+        after every row is written.
 
 Registration is idempotent: registering the same function under the same name again is a
 no-op (``ready()`` may run more than once); a different function under a taken name raises.
@@ -29,10 +40,12 @@ from collections.abc import Callable, Mapping
 from decimal import Decimal
 
 KINDS = ("scholarship", "payment")
-STUDENT_KINDS = ("student_credit", "refunds")
+STUDENT_KINDS = ("student_credit", "refunds", "refund_quote")
+ADJUSTMENT_KINDS = ("scholarship_reversal", "payment_release")
 _providers: dict[str, dict[str, Callable]] = {kind: {} for kind in KINDS}
 _student_providers: dict[str, dict[str, Callable]] = {kind: {} for kind in STUDENT_KINDS}
 _release_handlers: dict[str, Callable] = {}
+_adjustment_handlers: dict[str, dict[str, Callable]] = {kind: {} for kind in ADJUSTMENT_KINDS}
 
 
 class PaymentReleaseUnavailable(RuntimeError):
@@ -41,6 +54,12 @@ class PaymentReleaseUnavailable(RuntimeError):
     Payments registers a handler, so this means an integrity problem (the app is missing):
     it is raised inside the caller's transaction, which rolls back completely.
     """
+
+
+class AdjustmentHandlerUnavailable(RuntimeError):
+    """A withdrawal or cancellation must reverse scholarship or release payment money, but
+    exactly one handler of that kind is not registered (an integrity problem): raised inside
+    the caller's transaction, which rolls back completely."""
 
 
 def _register(table: dict[str, Callable], name: str, fn: Callable) -> None:
@@ -65,6 +84,54 @@ def register_student_provider(kind: str, name: str, fn: Callable) -> None:
     if kind not in STUDENT_KINDS:
         raise ValueError(f"kind must be one of {STUDENT_KINDS}, got {kind!r}")
     _register(_student_providers[kind], name, fn)
+
+
+def register_adjustment_handler(kind: str, name: str, fn: Callable) -> None:
+    if kind not in ADJUSTMENT_KINDS:
+        raise ValueError(f"kind must be one of {ADJUSTMENT_KINDS}, got {kind!r}")
+    _register(_adjustment_handlers[kind], name, fn)
+
+
+def _one_handler(kind: str) -> Callable:
+    handlers = _adjustment_handlers[kind]
+    if len(handlers) != 1:
+        raise AdjustmentHandlerUnavailable(
+            f"exactly one {kind} handler must be registered, found {sorted(handlers)}"
+        )
+    return next(iter(handlers.values()))
+
+
+def reverse_scholarship_for_adjustment(
+    *, invoice_line_id: str, amount: Decimal, reason: str, on_date, actor, source_ref
+) -> list:
+    """BR-WDR-03 step 1 / BR-SCH-07: reverse ``amount`` of the line's scholarship."""
+    if amount <= 0:
+        return []
+    return _one_handler("scholarship_reversal")(
+        invoice_line_id=invoice_line_id,
+        amount=amount,
+        reason=reason,
+        on_date=on_date,
+        actor=actor,
+        source_ref=source_ref,
+    )
+
+
+def release_payments_for_adjustment(
+    *, deallocations, rule: str, on_date, date_field: str, actor, source_ref
+) -> list:
+    """BR-WDR-03 step 2: deallocate [(allocation_id, amount)] with ``rule``."""
+    deallocations = [(a, amt) for a, amt in deallocations if amt > 0]
+    if not deallocations:
+        return []
+    return _one_handler("payment_release")(
+        deallocations=deallocations,
+        rule=rule,
+        on_date=on_date,
+        date_field=date_field,
+        actor=actor,
+        source_ref=source_ref,
+    )
 
 
 def allocations(kind: str, invoice) -> list:
@@ -107,4 +174,5 @@ def registered() -> dict[str, list[str]]:
         **{kind: sorted(table) for kind, table in _providers.items()},
         **{kind: sorted(table) for kind, table in _student_providers.items()},
         "payment_release": sorted(_release_handlers),
+        **{f"adjustment_{kind}": sorted(table) for kind, table in _adjustment_handlers.items()},
     }

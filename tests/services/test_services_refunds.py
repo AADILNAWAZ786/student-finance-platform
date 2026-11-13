@@ -208,6 +208,25 @@ def test_enrollment_only_for_withdrawal_or_cancellation(overpaid, fall_enrollmen
             actor="t",
         )
     assert exc.value.message_dict == {"enrollment": ["Must be omitted when reason is OVERPAYMENT."]}
+    # Phase 5 (D-W6): a WITHDRAWAL refund needs the enrollment to have been withdrawn
+    with pytest.raises(ValidationError) as exc:
+        services.request_refund(
+            payment=overpaid,
+            amount=D("1.00"),
+            requested_date=REQ,
+            reason="WITHDRAWAL",
+            enrollment=fall_enrollment,
+            actor="t",
+        )
+    assert exc.value.message_dict == {
+        "enrollment": [
+            f"{fall_enrollment.pk} is ENROLLED; a WITHDRAWAL refund needs a WITHDRAWN enrollment."
+        ]
+    }
+    from academics import services as academics
+
+    academics.withdraw_enrollment(fall_enrollment, withdrawal_date=date(2026, 9, 17), actor="t")
+    fall_enrollment.refresh_from_db()
     refund = services.request_refund(  # the model supports Phase 5's reasons (D-P14)
         payment=overpaid,
         amount=D("1.00"),
@@ -566,3 +585,118 @@ def test_worked_example_stages_a_to_c(
     ledger = LedgerEntry.objects.filter(student=s)
     assert ledger.count() == 14  # 6 CHARGE, 1 SCH_CREDIT, 2 PAYMENT, 2 ADJ, 1 SCH_REV, 2 REFUND
     assert sorted(ledger.values_list("entry_type", flat=True)).count("REFUND") == 2
+
+
+def test_worked_example_stages_b_and_c_through_the_withdraw_service(
+    make_program, make_student, terms, scholarship_types, evaluate
+):
+    """§7 Stages B–C again, Phase 5 style: ``academics.withdraw_enrollment`` derives every
+    number of the Stage B table itself (A, R, excess, the LIFO deallocations), and Stage C's
+    refunds are requested with reason WITHDRAWAL against the withdrawn enrollment (D-W6)."""
+    from academics import services as academics
+    from tests.billing_fixtures import make_fees
+
+    fall = terms["TERM-2026-FALL"]
+    program = make_program(code="BSC-WE")
+    make_fees(program, fall, prices=WORKED_PRICES)
+    s = make_student(program=program)
+    enrollment = academics.enroll(
+        student=s, term=fall, credits=16, enrolled_on=date(2026, 8, 10), actor="t"
+    )
+    inv = billing.generate_invoice(
+        enrollment=enrollment,
+        waivers=[NS(fee_type="STUDENT_ACTIVITY", amount=D("3000.00"), reason="HARDSHIP")],
+        actor="t",
+    )
+    award = scholarships.award_scholarship(
+        eligibility=evaluate(s)["SCT-001"], invoice=inv, actor="t"
+    )
+    scholarships.apply_scholarship(award, allocated_on=date(2026, 8, 17), actor="t")
+    pays = {}
+    for amount, payer, on in (
+        ("60000.00", "GUARDIAN", date(2026, 8, 25)),
+        ("50000.00", "SPONSOR", date(2026, 9, 10)),
+    ):
+        pays[payer], _ = services.record_payment(
+            student=s,
+            amount=D(amount),
+            received_date=on,
+            method="BANK_TRANSFER",
+            payer_type=payer,
+            external_reference=f"WE5-{payer}",
+            auto_allocate=True,
+            actor="t",
+        )
+
+    # Stage B: one call
+    result = academics.withdraw_enrollment(enrollment, withdrawal_date=date(2026, 9, 17), actor="t")
+    assert result.refund_pct == D("0.60")
+    plan = {p["adjusts_line"][-3:]: p for p in result.financial["invoice"]["release_plan"]}
+    assert {
+        k: (p["adjustment"], p["scholarship_reversal"], p["excess"]) for k, p in plan.items()
+    } == {
+        "L01": (D("-96000.00"), D("51600.00"), D("44400.00")),
+        "L02": (D("-7200.00"), D("0.00"), D("7200.00")),
+    }
+    released = PaymentAllocation.objects.filter(allocation_type="DEALLOCATE")
+    assert sorted((r.payment_id, r.invoice_line_id[-3:], r.amount) for r in released) == sorted(
+        [
+            (pays["SPONSOR"].payment_id, "L01", D("-14000.00")),
+            (pays["GUARDIAN"].payment_id, "L01", D("-30400.00")),
+            (pays["SPONSOR"].payment_id, "L02", D("-7200.00")),
+        ]
+    )
+    a = billing.current_amounts(inv)
+    assert (a.net_charges, a.scholarship_applied, a.amount_paid, a.outstanding) == (
+        D("79800.00"),
+        D("34400.00"),
+        D("45400.00"),
+        D("0.00"),
+    )
+    inv.refresh_from_db()
+    assert (inv.lifecycle_status, inv.collection_status) == ("ISSUED", "PAID")
+    b = billing.student_balance(s, None)
+    assert (b["ledger_balance"], b["unallocated_credit"], b["identity"]["holds"]) == (
+        D("-64600.00"),
+        D("64600.00"),
+        True,
+    )
+    assert result.financial["refund_quote"]["max_refundable"] == D("64600.00")
+    assert Refund.objects.count() == 0  # D-W6: never automatic
+
+    # Stage C: WITHDRAWAL refunds tied to the withdrawn enrollment
+    enrollment.refresh_from_db()
+    req = date(2026, 9, 18)
+    with pytest.raises(BusinessRuleViolation) as exc:
+        services.request_refund(
+            payment=pays["GUARDIAN"],
+            amount=D("35000.00"),
+            requested_date=req,
+            reason="WITHDRAWAL",
+            enrollment=enrollment,
+            actor="t",
+        )
+    assert exc.value.code == "REFUND_EXCEEDS_PAYMENT_AVAILABLE"
+    refunds = [
+        services.request_refund(
+            payment=pays[payer],
+            amount=D(amount),
+            requested_date=req,
+            reason="WITHDRAWAL",
+            enrollment=enrollment,
+            actor="t",
+        )
+        for payer, amount in (("SPONSOR", "34200.00"), ("GUARDIAN", "30400.00"))
+    ]
+    for r in refunds:
+        assert (r.enrollment_id, r.calculation["schedule_pct"]) == (enrollment.pk, "0.60")
+        services.approve_refund(r, on_date=date(2026, 9, 25), actor="t")
+        services.process_refund(r, processed_date=date(2026, 9, 30), actor="t")
+    b = billing.student_balance(s, None)
+    assert (b["ledger_balance"], b["unallocated_credit"], b["invoice_outstanding"]) == (
+        D("0.00"),
+        D("0.00"),
+        D("0.00"),
+    )
+    assert b["identity"]["holds"] is True
+    assert LedgerEntry.objects.filter(student=s).count() == 14  # as §7 states

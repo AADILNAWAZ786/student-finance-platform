@@ -594,7 +594,7 @@ def apply_scholarship(scholarship, *, allocated_on: date | None = None, actor: s
             },
         ) from exc
 
-    # BR-ALC-06: make room by releasing payment allocations first (none can exist yet)
+    # BR-ALC-06: make room by releasing payment allocations first (payments' LIFO handler)
     billing.release_payments_for_scholarship(
         invoice=invoice,
         releases={p.line_id: p.payment_to_release for p in plan},
@@ -647,14 +647,16 @@ def apply_scholarship(scholarship, *, allocated_on: date | None = None, actor: s
     return scholarship
 
 
-# --- reversal (BR-SCH-07 building block; Phase 5 calls it) ----------------------------------------
+# --- reversal (BR-SCH-07) -------------------------------------------------------------------------
 
 
 @transaction.atomic
 def reverse_allocation(allocation, *, amount, reason: str, on_date: date, actor: str):
     """Append a REVERSE row for ``amount`` (> 0) of an APPLY allocation, its
     SCHOLARSHIP_REVERSAL ledger entry, the first-reversal status change and the invoice
-    collection recalculation. No endpoint: Phase 5's ``reverse_for_adjustment`` calls it.
+    collection recalculation. No endpoint. (Withdrawals and cancellations use
+    ``reverse_for_adjustment``, which shares the row writing but not the date rule or the
+    recalculation.)
     """
     allocation = ScholarshipAllocation.objects.select_related(
         "scholarship", "invoice_line__invoice"
@@ -691,6 +693,22 @@ def reverse_allocation(allocation, *, amount, reason: str, on_date: date, actor:
     if on_date < earliest:
         raise ValidationError({"on_date": [f"on_date must be on or after {earliest}."]})
 
+    reversal = _append_reversal(
+        allocation, scholarship, amount=amount, reason=reason, on_date=on_date, actor=actor
+    )
+    billing.recalculate_collection_status(
+        invoice,
+        as_of=on_date,
+        reason="SCHOLARSHIP_REVERSED",
+        actor=actor,
+        source_ref=reversal.allocation_id,
+    )
+    return reversal
+
+
+def _append_reversal(allocation, scholarship, *, amount, reason, on_date, actor):
+    """Write one REVERSE row, its SCHOLARSHIP_REVERSAL ledger entry and, on the award's first
+    reversal, APPLIED → PARTIALLY_REVERSED with its event (D-S16). The caller validates."""
     reversal = ScholarshipAllocation(
         allocation_id=next_id("scholarship_allocation", parent=scholarship.scholarship_id),
         scholarship=scholarship,
@@ -716,11 +734,99 @@ def reverse_allocation(allocation, *, amount, reason: str, on_date: date, actor:
         )
         scholarship.status = PARTIALLY_REVERSED
         scholarship.save(update_fields=["status"])
-    billing.recalculate_collection_status(
-        invoice,
-        as_of=on_date,
-        reason="SCHOLARSHIP_REVERSED",
-        actor=actor,
-        source_ref=reversal.allocation_id,
-    )
     return reversal
+
+
+class ScholarshipReversalFailed(RuntimeError):
+    """A withdrawal or cancellation must reverse more scholarship than the line holds.
+
+    Billing computes R from the same allocations, so this is an integrity problem; it is
+    raised inside the caller's transaction, which rolls back completely.
+    """
+
+
+REVERSAL_DATE_FIELD = {
+    policy.WITHDRAWAL: "withdrawal_date",
+    policy.CANCELLATION: "cancellation_date",
+}
+
+
+@transaction.atomic
+def reverse_for_adjustment(
+    *, invoice_line_id: str, amount, reason: str, on_date: date, actor: str, source_ref=None
+) -> list:
+    """BR-WDR-03 step 1 / BR-SCH-07 (registered with billing as the scholarship_reversal
+    adjustment handler): reverse ``amount`` of the scholarship on one line, split across its
+    APPLY allocations in proportion to what each still holds, largest-remainder rounding,
+    ties by allocation_id (decision D-W4). Returns the REVERSE rows.
+
+    Dates: a business date, never before the allocation it reverses (decision D-W8: no
+    invoice-wide "latest date" rule). The invoice's collection status is left to billing,
+    which recalculates it once after the whole withdrawal or cancellation.
+    """
+    if reason not in policy.REVERSAL_REASONS:
+        raise ValidationError({"reason": [f"Must be one of {', '.join(policy.REVERSAL_REASONS)}."]})
+    amount = round_money(amount)
+    if amount <= 0:
+        raise ValidationError({"amount": ["Must be greater than 0."]})
+    field = REVERSAL_DATE_FIELD[reason]
+    check_business_date(field, on_date)
+    rows = list(
+        ScholarshipAllocation.objects.select_related("invoice_line").filter(
+            invoice_line_id=invoice_line_id
+        )
+    )
+    reversed_by = {}
+    for r in rows:
+        if r.allocation_type == policy.REVERSE:
+            reversed_by[r.reverses_id] = reversed_by.get(r.reverses_id, ZERO) - r.amount
+    remaining = {
+        r.allocation_id: r.amount - reversed_by.get(r.allocation_id, ZERO)
+        for r in rows
+        if r.allocation_type == policy.APPLY
+    }
+    try:
+        shares = calc.split_reversal(remaining, amount)
+    except ValueError as exc:
+        raise ScholarshipReversalFailed(
+            f"{source_ref}: {invoice_line_id} holds {dsum(remaining.values())} of scholarship, "
+            f"cannot reverse {amount}"
+        ) from exc
+    by_id = {r.allocation_id: r for r in rows}
+    for allocation_id in sorted(shares):  # validate every row before writing any
+        original = by_id[allocation_id]
+        if on_date < original.allocated_on:
+            raise ValidationError(
+                {
+                    field: [
+                        f"Must be on or after {original.allocated_on.isoformat()}, the date of "
+                        f"scholarship allocation {allocation_id}, which it would reverse."
+                    ]
+                }
+            )
+    scholarships = {
+        s.pk: s
+        for s in Scholarship.objects.select_for_update().filter(
+            pk__in={by_id[a].scholarship_id for a in shares}
+        )
+    }
+    for s in scholarships.values():
+        if s.status not in (APPLIED, PARTIALLY_REVERSED):
+            check_transition(
+                SCHOLARSHIP_TRANSITIONS,
+                s.status,
+                PARTIALLY_REVERSED,
+                entity="Scholarship",
+                record_id=s.scholarship_id,
+            )
+    return [
+        _append_reversal(
+            by_id[allocation_id],
+            scholarships[by_id[allocation_id].scholarship_id],
+            amount=shares[allocation_id],
+            reason=reason,
+            on_date=on_date,
+            actor=actor,
+        )
+        for allocation_id in sorted(shares)
+    ]

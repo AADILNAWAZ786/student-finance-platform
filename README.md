@@ -5,7 +5,7 @@ and reconcile student balances. Django 5.2 LTS + Django REST Framework + SQLite.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) (v1.1, frozen).
 
-**Status: Phase 4, payments and refunds** (on top of Phase 1: students, programs, terms,
+**Status: Phase 5, withdrawals and cancellations** (on top of Phase 1: students, programs, terms,
 enrollments; Phase 2: fee schedules, invoices, waivers, statuses, void, late fees, the ledger
 and the student ledger, statement and balance views; Phase 3: scholarship types, eligibility,
 awards and their application). Phase 4 adds payments from any payer (each posting one PAYMENT
@@ -13,7 +13,12 @@ ledger entry), AUTO and MANUAL allocation to invoice lines as append-only rows, 
 precedence (payment money released last-in-first-out when a scholarship needs the room),
 unallocated credit, and refunds (request → approve → process, or reject) capped by net paid,
 the credit balance less pending refunds, and the source payment's available amount, posting a
-REFUND ledger entry when processed. Withdrawals, cancellations and reconciliation are not
+REFUND ledger entry when processed. Phase 5 adds withdrawals (BR-WDR-02 schedule: 80 / 60 /
+40 / 0 % credit on refundable lines by day since term start) and cancellations before the
+start (BR-WDR-01: every line but REGISTRATION credited, invoice CANCELLED), each releasing
+scholarship money first (proportional reversal) and then payment money (last-in-first-out) so
+no line stays over-covered (BR-WDR-03). Refunds are never automatic: the exit returns a refund
+quote, and a WITHDRAWAL / CANCELLATION refund is requested separately. Reconciliation is not
 implemented yet.
 
 Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
@@ -21,8 +26,10 @@ Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2
 **Unresolved design limitations:** learner "own record" and instructor "own programs" access
 (ARCHITECTURE §13) are **blocked**, because the frozen model has no login↔student or
 login↔program link. Learners currently have no access; instructors read programs and terms only.
-Billing, scholarship, payment and refund data (Phases 2–4) is readable by `platform_admin` and
-`support_staff` only; support staff may also request a refund.
+Billing, scholarship, payment and refund data (Phases 2–5) is readable by `platform_admin` and
+`support_staff` only; support staff may also request a refund. Withdrawals and cancellations
+may be performed by `platform_admin` and `academic_admin`; only `platform_admin` sees their
+financial details.
 See [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md).
 
 ## Quick start
@@ -107,19 +114,33 @@ automatically).
 | GET | `/api/v1/payments/{id}/` | with `net_allocated`, `refunded`, `available`, `allocation_state` and the allocation rows |
 | POST | `/api/v1/payments/{id}/allocate/` | `{mode: "AUTO", allocated_on?}` or `{mode: "MANUAL", allocated_on, lines: [{invoice_line_id, amount}]}`; AUTO reports `outcome` ALLOCATED / NO_OPEN_LINES / NO_FUNDS_AVAILABLE |
 | GET | `/api/v1/payments/{id}/allocations/`, `/api/v1/payment-allocations/` | ALLOCATE and DEALLOCATE rows |
-| GET, POST | `/api/v1/refunds/` | POST `{payment_id, amount, requested_date}` (reason OVERPAYMENT); 422 above a cap |
+| GET, POST | `/api/v1/refunds/` | POST `{payment_id, amount, requested_date, reason?, enrollment_id?}`: reason OVERPAYMENT (default), or WITHDRAWAL / CANCELLATION with the withdrawn / cancelled `enrollment_id` (Phase 5); 422 above a cap |
 | GET | `/api/v1/refunds/{id}/` | with the request-time `calculation` and the status events |
 | POST | `/api/v1/refunds/{id}/approve/`, `reject/` (`{on_date}`), `process/` (`{processed_date}`) | caps re-checked at approve and process |
 | GET | `/api/v1/students/{id}/refundable/` | max refundable, per-payment available amounts, the calculation |
 
 Writes need `platform_admin`, except `POST /refunds/`, which `support_staff` may also call.
 In Django Admin the payments records are read-only (no add, change or delete).
-Deallocation has no endpoint (it is a service used by scholarship precedence and, in Phase 5,
-withdrawals). A payment holds at most 99 allocation rows (`409 ALLOCATION_LIMIT_REACHED`).
+Deallocation has no endpoint (it is a service used by scholarship precedence and by
+withdrawals and cancellations). A payment holds at most 99 allocation rows (`409 ALLOCATION_LIMIT_REACHED`).
+
+### Withdrawals and cancellations API (Phase 5)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/enrollments/{id}/withdraw/` | `{withdrawal_date}`: on or after the term start and `enrolled_on`, on or before the term end; ENROLLED → WITHDRAWN |
+| POST | `/api/v1/enrollments/{id}/cancel/` | `{cancellation_date}`: before the term start, on or after `enrolled_on`; ENROLLED → CANCELLED, invoice → CANCELLED |
+
+Both answer `{enrollment, kind, effective_date, refund_pct, financial_details_included}`;
+for `platform_admin` also `invoice` (statuses, amounts and the per-line release plan; null when
+there is no non-VOID invoice) and `refund_quote`. `academic_admin` gets neither key. Everything
+an exit writes (ADJUSTMENT lines and ledger entries, scholarship REVERSE rows, payment
+DEALLOCATE rows, events) is append-only and happens in one transaction. Refunds afterwards:
+`POST /api/v1/refunds/` with `reason` WITHDRAWAL or CANCELLATION and the `enrollment_id`.
 
 ## Tests and quality
 
-Everything implemented so far (Phases 0–4), including the runnable unit tests:
+Everything implemented so far (Phases 0–5), including the runnable unit tests:
 
 ```bash
 .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services \
@@ -127,21 +148,17 @@ Everything implemented so far (Phases 0–4), including the runnable unit tests:
     tests/unit/test_invoice_status.py tests/unit/test_invoice_lifecycle.py \
     tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py \
     tests/unit/test_full_ride_scholarship.py tests/unit/test_scholarship_calculators.py \
-    tests/unit/test_payment_allocation.py tests/unit/test_payment_calculators.py -rxX
-#   2108 passed, 2 xfailed (the two blocked rules)
+    tests/unit/test_payment_allocation.py tests/unit/test_payment_calculators.py \
+    tests/unit/test_withdrawal_calculators.py tests/unit/test_withdrawal_refund_pct.py \
+    tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py -rxX
+#   2232 passed, 2 xfailed (the two blocked rules)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-The other four files in `tests/unit/` are acceptance tests for later phases (ARCHITECTURE §14).
-They cannot be imported until their modules exist, so a bare `pytest` (all of `tests/`) stops
-at collection ("Interrupted: 4 errors during collection"). That is expected; use the command
-above. To see their status:
-
-```bash
-.venv/bin/python -m pytest --collect-only -q \
-    tests/unit/test_withdrawal_refund_pct.py tests/unit/test_withdrawal_release.py \
-    tests/unit/test_worked_example.py tests/unit/test_stage_rng.py
-```
+`tests/unit/test_stage_rng.py` is the acceptance test for the data generator (Phase 7,
+ARCHITECTURE §14). It cannot be imported until its module exists, so a bare `pytest` (all of
+`tests/`) stops at collection ("Interrupted: 1 error during collection"). That is expected;
+use the command above.
 
 `tests/verification/` is the API verification suite: every endpoint and method, roles,
 ground-truth isolation, health outages, rollback, determinism, migration safety, concurrency,
@@ -149,7 +166,8 @@ and every response validated against the OpenAPI schema. Results:
 [`docs/phase1_verification_results.txt`](docs/phase1_verification_results.txt),
 [`docs/phase2_verification_results.txt`](docs/phase2_verification_results.txt),
 [`docs/phase3_verification_results.txt`](docs/phase3_verification_results.txt),
-[`docs/phase4_verification_results.txt`](docs/phase4_verification_results.txt).
+[`docs/phase4_verification_results.txt`](docs/phase4_verification_results.txt),
+[`docs/phase5_verification_results.txt`](docs/phase5_verification_results.txt).
 
 ## Layout
 
@@ -157,18 +175,20 @@ and every response validated against the OpenAPI schema. Results:
 config/          settings (two SQLite DBs), GroundTruthRouter, URLs
 core/            IDs, money (Decimal), domain errors + API error envelope, permissions,
                  SQLite system checks, IdSequence, StatusEventBase, health view
-students/ academics/   Phase 1 apps
+students/ academics/   Phase 1 apps; academics also: calculators.py (BR-WDR-02 schedule),
+                 exits.py (exit-handler registry), withdraw / cancel (Phase 5)
 billing/         Phase 2: models, calculators (pure), lifecycle, policy, services, API;
-                 allocations.py = registry through which higher apps' allocations are seen
+                 allocations.py = registry through which higher apps' allocations are seen;
+                 withdrawals.py = the financial side of an exit (Phase 5)
 scholarships/    Phase 3: models, calculators (pure), lifecycle, policy, services, API,
                  seed_scholarship_types command
 payments/        Phase 4: models, calculators (pure), lifecycle, policy, services, API,
                  read-only admin
-reconciliation/ datagen/
-                 registered app skeletons; models arrive in Phases 6–7
+reconciliation/  calculators.balance_from_ledger (Phase 5); the rest arrives in Phase 6
+datagen/         registered app skeleton; arrives in Phase 7
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
-                 (Phases 1–4); workflow/ (§9.3 steps 1–9); architecture/; unit/ (acceptance
-                 tests; 8 runnable now, 4 for later phases); billing_fixtures.py,
+                 (Phases 1–5); workflow/ (§9.3 steps 1–9); architecture/; unit/ (acceptance
+                 tests; 12 runnable now, 1 for Phase 7); billing_fixtures.py,
                  scholarship_fixtures.py, payment_fixtures.py
 docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results
 ```

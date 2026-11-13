@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
 from core.money import ZERO, dsum, round_money, to_decimal
 from scholarships import policy
@@ -216,3 +216,32 @@ def net_by_line(allocations: Iterable) -> dict[str, Decimal]:
     for a in allocations:
         out[a.invoice_line_id] = out.get(a.invoice_line_id, ZERO) + to_decimal(a.amount)
     return {k: round_money(v) for k, v in out.items()}
+
+
+# --- reversal split (BR-SCH-07, decision D-W4) ------------------------------------------------
+
+
+def split_reversal(remaining: dict[str, Decimal], total) -> dict[str, Decimal]:
+    """Split a line's scholarship reversal ``total`` across its APPLY allocations in
+    proportion to what each still holds (``remaining``: allocation_id → amount > 0).
+
+    Largest-remainder rounding to the cent: every share is first rounded down, then the
+    leftover cents go one each to the largest fractional parts, ties broken by allocation_id
+    ascending. The shares sum exactly to ``total`` and none exceeds its remaining amount.
+    Raises ``ValueError`` if ``total`` < 0 or above Σ remaining.
+    """
+    total = to_decimal(total)
+    weights = {k: to_decimal(v) for k, v in remaining.items() if to_decimal(v) > 0}
+    held = sum(weights.values(), Decimal("0"))
+    if total < 0 or total > held:
+        raise ValueError(f"cannot reverse {total} from allocations holding {held}")
+    if total == 0:
+        return {}
+    cent = Decimal("0.01")
+    exact = {k: total * w / held for k, w in weights.items()}
+    shares = {k: v.quantize(cent, rounding=ROUND_DOWN) for k, v in exact.items()}
+    leftover = int((total - sum(shares.values(), Decimal("0"))) / cent)
+    order = sorted(weights, key=lambda k: (-(exact[k] - shares[k]), k))
+    for k in order[:leftover]:
+        shares[k] += cent
+    return {k: v for k, v in shares.items() if v > 0}

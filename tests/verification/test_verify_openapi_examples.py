@@ -73,6 +73,8 @@ OPERATIONS = {
     "enrollments_create": ("post", "/api/v1/enrollments/", {}),
     "enrollments_retrieve": ("get", "/api/v1/enrollments/ENR-2026-000001/", None),
     "enrollments_events_list": ("get", "/api/v1/enrollments/ENR-2026-000001/events/", None),
+    "enrollments_withdraw_create": ("post", "/api/v1/enrollments/ENR-2026-000001/withdraw/", {}),
+    "enrollments_cancel_create": ("post", "/api/v1/enrollments/ENR-2026-000001/cancel/", {}),
     # Phase 2: billing
     "fee_schedules_list": ("get", "/api/v1/fee-schedules/", None),
     "fee_schedules_create": ("post", "/api/v1/fee-schedules/", {}),
@@ -863,7 +865,7 @@ PHASE4_SPECIFIC = {
     ("refunds_retrieve", 404, "Unknown Refund"): lambda w: w.finance.get(
         "/api/v1/refunds/REF-2026-999999/"
     ),
-    ("refunds_create", 400, "Reason other than OVERPAYMENT"): lambda w: (
+    ("refunds_create", 400, "WITHDRAWAL without enrollment_id"): lambda w: (
         _pay(w, "174000.00"),
         w.finance.post(
             "/api/v1/refunds/",
@@ -872,6 +874,20 @@ PHASE4_SPECIFIC = {
                 "amount": "100.00",
                 "requested_date": "2026-09-18",
                 "reason": "WITHDRAWAL",
+            },
+            format="json",
+        ),
+    )[1],
+    ("refunds_create", 400, "WITHDRAWAL for an enrollment still ENROLLED"): lambda w: (
+        _pay(w, "174000.00"),
+        w.finance.post(
+            "/api/v1/refunds/",
+            {
+                "payment_id": PAY1,
+                "amount": "100.00",
+                "requested_date": "2026-09-18",
+                "reason": "WITHDRAWAL",
+                "enrollment_id": "ENR-2026-000001",
             },
             format="json",
         ),
@@ -920,6 +936,61 @@ PHASE4_SPECIFIC = {
     ),
 }
 SPECIFIC.update(PHASE4_SPECIFIC)
+
+
+# --- Phase 5 recipes: withdrawals and cancellations ---------------------------------------------
+ENR_FALL, ENR_DONE = "ENR-2026-000001", "ENR-2026-000002"  # FALL (ENROLLED), SPRING (COMPLETED)
+
+
+def _exit(w, enrollment, step, body):
+    return w.admin.post(f"/api/v1/enrollments/{enrollment}/{step}/", body, format="json")
+
+
+def _withdraw_with_a_payment_at_98_rows(w):
+    """48 × (allocate 1.00 + release it) = 96 rows, then 40,000 on L01 and 6,000 on L02 = 98.
+    A withdrawal on day 0 (80%) must release on both lines: 2 more rows do not fit."""
+    from payments import services
+
+    payment = _pay(w, "50000.00")
+    for _ in range(48):
+        (row,) = _manual(w, payment, ("L01", "1.00")).allocations
+        services.deallocate(
+            row,
+            amount=Decimal("1.00"),
+            rule_applied="SCHOLARSHIP_PRECEDENCE",
+            on_date=date(2026, 8, 20),
+            actor="t",
+        )
+    _manual(w, payment, ("L01", "40000.00"), ("L02", "6000.00"))
+    return _exit(w, ENR_FALL, "withdraw", {"withdrawal_date": "2026-09-07"})
+
+
+PHASE5_SPECIFIC = {
+    ("enrollments_withdraw_create", 400, "Before the term start"): lambda w: _exit(
+        w, ENR_FALL, "withdraw", {"withdrawal_date": "2026-09-06"}
+    ),
+    ("enrollments_withdraw_create", 404, "Unknown Enrollment"): lambda w: _exit(
+        w, "ENR-2026-999999", "withdraw", {"withdrawal_date": "2026-09-17"}
+    ),
+    ("enrollments_withdraw_create", 409, "Not ENROLLED"): lambda w: _exit(
+        w, ENR_DONE, "withdraw", {"withdrawal_date": "2026-09-17"}
+    ),
+    (
+        "enrollments_withdraw_create",
+        409,
+        "A release needs allocation IDs a payment no longer has",
+    ): _withdraw_with_a_payment_at_98_rows,
+    ("enrollments_cancel_create", 400, "On or after the term start"): lambda w: _exit(
+        w, ENR_FALL, "cancel", {"cancellation_date": "2026-09-07"}
+    ),
+    ("enrollments_cancel_create", 404, "Unknown Enrollment"): lambda w: _exit(
+        w, "ENR-2026-999999", "cancel", {"cancellation_date": "2026-08-25"}
+    ),
+    ("enrollments_cancel_create", 409, "Not ENROLLED"): lambda w: _exit(
+        w, ENR_DONE, "cancel", {"cancellation_date": "2026-08-25"}
+    ),
+}
+SPECIFIC.update(PHASE5_SPECIFIC)
 
 
 def _recipe(op_id, status, summary):
@@ -1000,7 +1071,9 @@ def test_documented_examples_were_found():
     # Phase 4 payments and refunds 61: payments list 4, create 5, retrieve 3, allocate 8,
     # allocations 4; payment-allocations list 4; refunds list 4, create 6, retrieve 3,
     # approve 6, process 6, reject 5; student refundable 3
-    assert len(EXAMPLES) == 56 + 56 + 36 + 61
+    # Phase 5: enrollments withdraw 6 and cancel 5; refunds create +1 (two 400s replace the
+    # Phase 4 "Reason other than OVERPAYMENT" one, which is now valid input)
+    assert len(EXAMPLES) == 56 + 56 + 36 + 61 + 12
     assert {op for op, *_ in EXAMPLES} >= set(OPERATIONS) | {"health_check"}
 
 

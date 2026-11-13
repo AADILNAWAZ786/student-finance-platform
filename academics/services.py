@@ -9,17 +9,30 @@ Rules enforced here (DATABASE_DESIGN.md §3 SV rules):
               credits within the program range (422 CREDITS_OUT_OF_RANGE);
               one per student and term (409 ENROLLMENT_EXISTS);
               enrolled_on ≤ term start + 7; student's admit term ≤ enrolled term
+  Withdrawal  ENROLLED → WITHDRAWN, term start ≤ withdrawal_date ≤ term end, on or after
+              enrolled_on (BR-WDR-02; DATABASE_DESIGN Enrollment SV)
+  Cancellation ENROLLED → CANCELLED, enrolled_on ≤ cancellation_date < term start (BR-WDR-01)
+
+Withdrawals and cancellations (Phase 5, decision D-W1): these services are the entry points
+and orchestrate the whole operation in one transaction. They change the enrollment, then
+call the exit handlers registered in ``academics.exits`` (billing registers one; it reaches
+scholarships and payments through billing's registry), because academics may not import the
+apps above it. A repeated request finds a terminal status: 409 ILLEGAL_TRANSITION.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
+from academics.calculators import withdrawal_refund_pct
 from academics.calendar import CENSUS_OFFSET_DAYS
-from academics.lifecycle import COMPLETED, ENROLLED, ENROLLMENT_TRANSITIONS
+from academics.exits import run_exit_handlers
+from academics.lifecycle import CANCELLED, COMPLETED, ENROLLED, ENROLLMENT_TRANSITIONS, WITHDRAWN
 from academics.models import Enrollment, EnrollmentEvent, Program, Term
 from core.exceptions import domain_error
 from core.ids import next_id, term_id
@@ -251,3 +264,120 @@ def complete_enrollment(enrollment: Enrollment, *, on_date: date, actor: str) ->
         actor=actor,
     )
     return enrollment
+
+
+# --- withdrawals and cancellations (Phase 5: BR-WDR-01..03) ----------------------------------
+
+
+@dataclass
+class ExitResult:
+    """What a withdrawal or cancellation did. ``handlers`` holds each exit handler's result
+    (billing's: the invoice, its release plan and the refund quote)."""
+
+    enrollment: Enrollment
+    kind: str  # WITHDRAWAL or CANCELLATION
+    effective_date: date
+    refund_pct: Decimal | None  # BR-WDR-02 schedule; None for a cancellation
+    handlers: dict = field(default_factory=dict)
+
+    @property
+    def financial(self) -> dict | None:
+        return self.handlers.get("billing")
+
+
+def _locked_enrollment(enrollment) -> Enrollment:
+    return (
+        Enrollment.objects.select_for_update()
+        .select_related("term", "student")
+        .get(pk=enrollment.pk)
+    )
+
+
+def _exit(enrollment: Enrollment, *, target, kind, on_date, refund_pct, date_field, actor):
+    previous = enrollment.status
+    enrollment.status = target
+    setattr(enrollment, date_field, on_date)
+    enrollment.save(update_fields=["status", date_field])
+    _event(
+        enrollment,
+        from_status=previous,
+        to_status=target,
+        event_date=on_date,
+        reason=kind,
+        actor=actor,
+    )
+    handlers = run_exit_handlers(
+        kind=kind, enrollment=enrollment, on_date=on_date, refund_pct=refund_pct, actor=actor
+    )
+    return ExitResult(enrollment, kind, on_date, refund_pct, handlers)
+
+
+@transaction.atomic
+def withdraw_enrollment(enrollment: Enrollment, *, withdrawal_date: date, actor: str) -> ExitResult:
+    """ENROLLED → WITHDRAWN on ``withdrawal_date`` (on or after the term start, BR-WDR-02),
+    then the invoice adjustments, scholarship reversals and payment releases (BR-WDR-03),
+    all in this transaction."""
+    enrollment = _locked_enrollment(enrollment)
+    check_transition(
+        ENROLLMENT_TRANSITIONS,
+        enrollment.status,
+        WITHDRAWN,
+        entity="Enrollment",
+        record_id=enrollment.enrollment_id,
+    )
+    term = enrollment.term
+    problems = []
+    if withdrawal_date < term.start_date:
+        problems.append(
+            f"Must be on or after the term start ({term.start_date}); before the start, "
+            "cancel the enrollment instead."
+        )
+    elif withdrawal_date > term.end_date:
+        problems.append(f"Must be on or before the term end ({term.end_date}).")
+    if withdrawal_date < enrollment.enrolled_on:
+        problems.append(f"Must be on or after enrolled_on ({enrollment.enrolled_on}).")
+    if problems:
+        raise ValidationError({"withdrawal_date": problems})
+    return _exit(
+        enrollment,
+        target=WITHDRAWN,
+        kind="WITHDRAWAL",
+        on_date=withdrawal_date,
+        refund_pct=withdrawal_refund_pct(term, withdrawal_date),
+        date_field="withdrawal_date",
+        actor=actor,
+    )
+
+
+@transaction.atomic
+def cancel_enrollment(enrollment: Enrollment, *, cancellation_date: date, actor: str) -> ExitResult:
+    """ENROLLED → CANCELLED on ``cancellation_date`` (before the term start, BR-WDR-01), then
+    the invoice adjustments, releases and ISSUED → CANCELLED, all in this transaction."""
+    enrollment = _locked_enrollment(enrollment)
+    check_transition(
+        ENROLLMENT_TRANSITIONS,
+        enrollment.status,
+        CANCELLED,
+        entity="Enrollment",
+        record_id=enrollment.enrollment_id,
+    )
+    term = enrollment.term
+    problems = []
+    if cancellation_date >= term.start_date:
+        problems.append(
+            f"Must be before the term start ({term.start_date}); from the start on, withdraw "
+            "the enrollment instead."
+        )
+    if cancellation_date < enrollment.enrolled_on:
+        problems.append(f"Must be on or after enrolled_on ({enrollment.enrolled_on}).")
+    if problems:
+        raise ValidationError({"cancellation_date": problems})
+    return _exit(
+        enrollment,
+        target=CANCELLED,
+        kind="CANCELLATION",
+        on_date=cancellation_date,
+        refund_pct=None,
+        date_field="cancellation_date",
+        actor=actor,
+    )
