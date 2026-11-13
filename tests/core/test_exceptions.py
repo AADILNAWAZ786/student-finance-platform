@@ -8,7 +8,9 @@ from rest_framework.test import APIRequestFactory
 from rest_framework.views import APIView
 
 from core.exceptions import (
+    DOCUMENTED_DOMAIN_ERROR_CODES,
     DOMAIN_ERROR_CODES,
+    EXTENSION_DOMAIN_ERROR_CODES,
     BusinessRuleViolation,
     DomainError,
     StateConflict,
@@ -20,8 +22,8 @@ factory = APIRequestFactory()
 
 
 def test_registry_has_the_18_documented_codes():
-    assert len(DOMAIN_ERROR_CODES) == 18
-    assert {c for c, s in DOMAIN_ERROR_CODES.items() if s == 409} == {
+    assert len(DOCUMENTED_DOMAIN_ERROR_CODES) == 18
+    assert {c for c, s in DOCUMENTED_DOMAIN_ERROR_CODES.items() if s == 409} == {
         "DUPLICATE_INVOICE",
         "DUPLICATE_PAYMENT",
         "ENROLLMENT_EXISTS",
@@ -30,6 +32,27 @@ def test_registry_has_the_18_documented_codes():
         "ILLEGAL_TRANSITION",
     }
     assert set(DOMAIN_ERROR_CODES.values()) == {409, 422}
+
+
+def test_documented_codes_are_exactly_the_frozen_catalogue():
+    """ARCHITECTURE §10 lists the domain codes in one line; the registry matches it."""
+    import re
+    from pathlib import Path
+
+    from django.conf import settings
+
+    text = (Path(settings.BASE_DIR) / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    line = next(x for x in text.splitlines() if x.startswith("Domain error codes:"))
+    assert set(re.findall(r"`([A-Z_]+)`", line)) == set(DOCUMENTED_DOMAIN_ERROR_CODES)
+
+
+def test_the_only_extension_is_the_approved_phase4_code():
+    """D-P13a / P4-O2: one approved exception to the 18-code catalogue, nothing else."""
+    assert EXTENSION_DOMAIN_ERROR_CODES == {"ALLOCATION_LIMIT_REACHED": 409}
+    assert DOMAIN_ERROR_CODES == {**DOCUMENTED_DOMAIN_ERROR_CODES, **EXTENSION_DOMAIN_ERROR_CODES}
+    assert len(DOMAIN_ERROR_CODES) == 19
+    e = domain_error("ALLOCATION_LIMIT_REACHED", "full")
+    assert isinstance(e, StateConflict) and e.status_code == 409
 
 
 def test_domain_error_picks_subclass_and_status():

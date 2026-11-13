@@ -172,6 +172,13 @@ SPECTACULAR_SETTINGS = {
         "FeeScheduleResidencyEnum": "billing.models.FeeSchedule.Residency",
         # Phase 3: scholarship award status
         "ScholarshipStatusEnum": "scholarships.models.Scholarship.Status",
+        # Phase 4: payment / refund status and refund reason; keep Phase 3's allocation enum name
+        "AllocationTypeEnum": "scholarships.models.ScholarshipAllocation.AllocationType",
+        "PaymentAllocationTypeEnum": "payments.models.PaymentAllocation.AllocationType",
+        "PaymentStatusEnum": "payments.models.Payment.Status",
+        "RefundStatusEnum": "payments.models.Refund.Status",
+        "RefundReasonEnum": "payments.models.Refund.Reason",
+        "RefundRequestReasonEnum": ["OVERPAYMENT"],
     },
 }
 

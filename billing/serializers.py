@@ -365,13 +365,17 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
     student = serializers.CharField(source="student_id", read_only=True)
     amount = MoneyField(read_only=True)
     source_type = serializers.SerializerMethodField(
-        help_text="INVOICE_LINE or SCHOLARSHIP_ALLOCATION (PAYMENT / REFUND from Phase 4)"
+        help_text="INVOICE_LINE, SCHOLARSHIP_ALLOCATION, PAYMENT or REFUND"
     )
     invoice_line = serializers.CharField(source="invoice_line_id", read_only=True, allow_null=True)
     scholarship_allocation = serializers.CharField(
         source="scholarship_allocation_id", read_only=True, allow_null=True
     )
-    invoice = serializers.SerializerMethodField()
+    payment = serializers.CharField(source="payment_id", read_only=True, allow_null=True)
+    refund = serializers.CharField(source="refund_id", read_only=True, allow_null=True)
+    invoice = serializers.SerializerMethodField(
+        help_text="The invoice of a line or scholarship source; null for payments and refunds"
+    )
 
     class Meta:
         model = LedgerEntry
@@ -384,13 +388,21 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "source_type",
             "invoice_line",
             "scholarship_allocation",
+            "payment",
+            "refund",
             "invoice",
             "memo",
         ]
         read_only_fields = fields
 
     def get_source_type(self, obj) -> str:
-        return "SCHOLARSHIP_ALLOCATION" if obj.scholarship_allocation_id else "INVOICE_LINE"
+        if obj.scholarship_allocation_id:
+            return "SCHOLARSHIP_ALLOCATION"
+        if obj.payment_id:
+            return "PAYMENT"
+        if obj.refund_id:
+            return "REFUND"
+        return "INVOICE_LINE"
 
     def get_invoice(self, obj) -> str | None:
         if obj.invoice_line_id:
@@ -412,12 +424,39 @@ class AllocationRefSerializer(serializers.Serializer):
     allocated_on = serializers.DateField()
 
 
+class PaymentAllocationRefSerializer(serializers.Serializer):
+    """A payment allocation as billing shows it (read from the allocation registry)."""
+
+    allocation_id = serializers.CharField()
+    payment = serializers.CharField(source="payment_id")
+    payer_type = serializers.CharField(help_text="SELF, GUARDIAN or SPONSOR (BR-PAY-03)")
+    invoice_line = serializers.CharField(source="invoice_line_id")
+    allocation_type = serializers.CharField(help_text="ALLOCATE or DEALLOCATE")
+    amount = MoneyField(help_text="signed: ALLOCATE > 0, DEALLOCATE < 0")
+    reverses = serializers.CharField(source="reverses_id", allow_null=True)
+    rule_applied = serializers.CharField()
+    allocated_on = serializers.DateField()
+
+
+class RefundRefSerializer(serializers.Serializer):
+    """A refund as billing shows it on a statement (read from the payments provider)."""
+
+    refund_id = serializers.CharField()
+    payment = serializers.CharField(source="payment_id")
+    payer_type = serializers.CharField(help_text="Refunds go back to the source payment's payer")
+    reason = serializers.CharField()
+    amount = MoneyField()
+    requested_date = serializers.DateField()
+    processed_date = serializers.DateField(allow_null=True)
+    status = serializers.CharField(help_text="REQUESTED, APPROVED, PROCESSED or REJECTED")
+
+
 class StatementInvoiceSerializer(InvoiceDetailSerializer):
     scholarship_allocations = serializers.SerializerMethodField(
         help_text="APPLY and REVERSE scholarship allocations on this invoice's lines"
     )
     payment_allocations = serializers.SerializerMethodField(
-        help_text="Empty until payments exist (Phase 4)"
+        help_text="ALLOCATE and DEALLOCATE payment allocations on this invoice's lines"
     )
 
     class Meta(InvoiceDetailSerializer.Meta):
@@ -435,17 +474,18 @@ class StatementInvoiceSerializer(InvoiceDetailSerializer):
         scholarship, _ = allocations_for(obj)
         return AllocationRefSerializer(scholarship, many=True).data
 
-    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    @extend_schema_field(PaymentAllocationRefSerializer(many=True))
     def get_payment_allocations(self, obj):
-        return []
+        from billing.services import allocations_for
+
+        _, payments = allocations_for(obj)
+        return PaymentAllocationRefSerializer(payments, many=True).data
 
 
 class StatementSerializer(serializers.Serializer):
     student_id = serializers.CharField()
     invoices = StatementInvoiceSerializer(many=True)
-    refunds = serializers.ListField(
-        child=serializers.DictField(), help_text="Empty until refunds exist (Phase 4)"
-    )
+    refunds = RefundRefSerializer(many=True, help_text="The student's refunds, any status")
 
 
 class BalanceQuerySerializer(StrictInputMixin, serializers.Serializer):
@@ -460,9 +500,11 @@ class BalanceBreakdownSerializer(serializers.Serializer):
     adjustments = MoneyField()
     scholarship_credits = MoneyField(help_text="Σ SCHOLARSHIP_CREDIT entries (≤ 0)")
     scholarship_reversals = MoneyField(help_text="Σ SCHOLARSHIP_REVERSAL entries (≥ 0)")
-    payments = MoneyField(help_text="0.00 until Phase 4")
-    payments_by_payer = PaymentsByPayerSerializer()
-    refunds = MoneyField(help_text="0.00 until Phase 4")
+    payments = MoneyField(help_text="Σ PAYMENT entries (≤ 0)")
+    payments_by_payer = PaymentsByPayerSerializer(
+        help_text="Σ PAYMENT entries per payer_type (≤ 0); every payer counts (BR-PAY-03)"
+    )
+    refunds = MoneyField(help_text="Σ REFUND entries (≥ 0): PROCESSED refunds only")
 
 
 class BalanceIdentitySerializer(serializers.Serializer):
@@ -478,5 +520,8 @@ class BalanceSerializer(serializers.Serializer):
     ledger_balance = MoneyField(help_text="BR-BAL-01; negative = credit balance")
     breakdown = BalanceBreakdownSerializer()
     invoice_outstanding = MoneyField()
-    unallocated_credit = MoneyField(help_text="0.00 until payments exist (Phase 4)")
+    unallocated_credit = MoneyField(
+        help_text="BR-BAL-02, from the payment records: Σ payments − Σ net payment "
+        "allocations − Σ PROCESSED refunds"
+    )
     identity = BalanceIdentitySerializer()

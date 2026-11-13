@@ -2,7 +2,8 @@
 
 /api/v1/            versioned API: health, students, programs, terms, enrollments,
                     fee schedules, invoices, billing batches, student ledger/statement/balance,
-                    scholarship types, eligibility, scholarship awards
+                    scholarship types, eligibility, scholarship awards, payments,
+                    payment allocations, refunds, student refundable amounts
 /api/schema/        OpenAPI 3 schema (drf-spectacular)
 /api/docs/          Swagger UI
 /api/redoc/         ReDoc
@@ -22,6 +23,7 @@ api_v1 = [
     path("", include("academics.urls")),
     path("", include("billing.urls")),
     path("", include("scholarships.urls")),
+    path("", include("payments.urls")),
 ]
 
 urlpatterns = [

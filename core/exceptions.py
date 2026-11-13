@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-# Domain error codes -> HTTP status (ARCHITECTURE §10). 409 = state conflict,
-# 422 = valid request that breaks a financial rule.
-DOMAIN_ERROR_CODES: dict[str, int] = {
+# Domain error codes -> HTTP status. 409 = state conflict, 422 = valid request that breaks
+# a financial rule. The 18 codes of ARCHITECTURE §10 (frozen catalogue):
+DOCUMENTED_DOMAIN_ERROR_CODES: dict[str, int] = {
     "DUPLICATE_INVOICE": 409,
     "DUPLICATE_PAYMENT": 409,
     "FEE_SCHEDULE_NOT_FOUND": 422,
@@ -33,6 +33,19 @@ DOMAIN_ERROR_CODES: dict[str, int] = {
     "REFUND_EXCEEDS_CREDIT_BALANCE": 422,
     "REFUND_EXCEEDS_PAYMENT_AVAILABLE": 422,
     "ILLEGAL_TRANSITION": 409,
+}
+
+# Approved exceptions to the frozen catalogue, each documented in docs/KNOWN_LIMITATIONS.md:
+#   ALLOCATION_LIMIT_REACHED (Phase 4, decision D-P13a / P4-O2): a payment has used all 99
+#   allocation IDs its frozen format allows (``ALLOC-{payment_id}-NN``, deallocations
+#   included). A state conflict: no request body can fix it.
+EXTENSION_DOMAIN_ERROR_CODES: dict[str, int] = {
+    "ALLOCATION_LIMIT_REACHED": 409,
+}
+
+DOMAIN_ERROR_CODES: dict[str, int] = {
+    **DOCUMENTED_DOMAIN_ERROR_CODES,
+    **EXTENSION_DOMAIN_ERROR_CODES,
 }
 
 # Infrastructure codes used by the exception handler for non-domain errors.

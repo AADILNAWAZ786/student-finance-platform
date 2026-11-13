@@ -10,12 +10,13 @@ Every row is append-only except the two derived status columns on Invoice
 (``lifecycle_status`` and ``collection_status`` + ``collection_status_as_of``), which change
 only together with an InvoiceEvent.
 
-LedgerEntry is **staged** (Phase 2 decision D1): Phase 2 created the ``invoice_line``
+LedgerEntry was **staged** (Phase 2 decision D1): Phase 2 created the ``invoice_line``
 source for CHARGE, LATE_FEE and ADJUSTMENT entries; Phase 3 added the
 ``scholarship_allocation`` source for SCHOLARSHIP_CREDIT / SCHOLARSHIP_REVERSAL (migration
-0002). The ``payment`` / ``refund`` sources (Phase 4) follow the same way, after which the
-table matches DATABASE_DESIGN.md exactly. The scholarship FK is a string reference: billing
-never imports the scholarships app.
+0002); Phase 4 added the ``payment`` (PAYMENT) and ``refund`` (REFUND) sources (migration
+0003). The table now matches DATABASE_DESIGN.md exactly: four source columns, seven entry
+types. The scholarship and payments FKs are string references: billing never imports the
+scholarships or payments apps.
 ``tests/models/test_billing_schema_contract.py`` checks this against the design document.
 """
 
@@ -29,6 +30,34 @@ from core.models import StatusEventBase
 MONEY = {"max_digits": 12, "decimal_places": 2}
 LINE_ENTRY_TYPES = ["CHARGE", "LATE_FEE", "ADJUSTMENT"]
 SCHOLARSHIP_ENTRY_TYPES = ["SCHOLARSHIP_CREDIT", "SCHOLARSHIP_REVERSAL"]
+PAYMENT_ENTRY_TYPES = ["PAYMENT"]
+REFUND_ENTRY_TYPES = ["REFUND"]
+ENTRY_TYPES = [
+    *LINE_ENTRY_TYPES,
+    *SCHOLARSHIP_ENTRY_TYPES,
+    *PAYMENT_ENTRY_TYPES,
+    *REFUND_ENTRY_TYPES,
+]
+# the four source columns of DATABASE_DESIGN and the entry types each one posts (BR-LED-01)
+LEDGER_SOURCES = {
+    "invoice_line": LINE_ENTRY_TYPES,
+    "scholarship_allocation": SCHOLARSHIP_ENTRY_TYPES,
+    "payment": PAYMENT_ENTRY_TYPES,
+    "refund": REFUND_ENTRY_TYPES,
+}
+
+
+def _exactly_one_source_matching_type() -> Q:
+    """Exactly one of the four source FKs is set, and it is the one for entry_type."""
+    branches = [
+        Q(
+            entry_type__in=types,
+            **{f"{source}__isnull": False},
+            **{f"{other}__isnull": True for other in LEDGER_SOURCES if other != source},
+        )
+        for source, types in LEDGER_SOURCES.items()
+    ]
+    return Q(*branches, _connector=Q.OR)
 
 
 def _flag_matches(field: str, types) -> Q:
@@ -415,16 +444,18 @@ class InvoiceEvent(StatusEventBase):
 
 
 class LedgerEntry(models.Model):
-    """Exactly one entry per source row (BR-LED-01). Staged: see the module docstring."""
+    """Exactly one entry per source row (BR-LED-01). See the module docstring."""
 
     class EntryType(models.TextChoices):
-        # invoice-line sources (Phase 2) and scholarship-allocation sources (Phase 3).
-        # PAYMENT / REFUND arrive in Phase 4 with their source FKs.
+        # invoice-line sources (Phase 2), scholarship-allocation sources (Phase 3),
+        # payment and refund sources (Phase 4)
         CHARGE = "CHARGE"
         LATE_FEE = "LATE_FEE"
         ADJUSTMENT = "ADJUSTMENT"
         SCHOLARSHIP_CREDIT = "SCHOLARSHIP_CREDIT"
         SCHOLARSHIP_REVERSAL = "SCHOLARSHIP_REVERSAL"
+        PAYMENT = "PAYMENT"
+        REFUND = "REFUND"
 
     entry_id = models.CharField(
         max_length=ID_MAX_LENGTHS["ledger_entry"],
@@ -452,6 +483,21 @@ class LedgerEntry(models.Model):
         blank=True,
         related_name="ledger_entry",
     )
+    payment = models.OneToOneField(
+        "payments.Payment",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ledger_entry",
+    )
+    # REFUND entries post only when the refund is PROCESSED (1:0..1, BR-REF-03)
+    refund = models.OneToOneField(
+        "payments.Refund",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ledger_entry",
+    )
     memo = models.CharField(max_length=120, null=True, blank=True)  # noqa: DJ001
     recorded_at = models.DateTimeField(auto_now_add=True)
 
@@ -459,7 +505,7 @@ class LedgerEntry(models.Model):
         ordering = ("entry_date", "entry_id")
         constraints = [
             models.CheckConstraint(
-                condition=Q(entry_type__in=[*LINE_ENTRY_TYPES, *SCHOLARSHIP_ENTRY_TYPES]),
+                condition=Q(entry_type__in=ENTRY_TYPES),
                 name="ledgerentry_entry_type_enum",
             ),
             models.CheckConstraint(
@@ -467,21 +513,14 @@ class LedgerEntry(models.Model):
                 | (Q(entry_type="LATE_FEE") & Q(amount__gt=0))
                 | (Q(entry_type="ADJUSTMENT") & Q(amount__lt=0))
                 | (Q(entry_type="SCHOLARSHIP_CREDIT") & Q(amount__lt=0))
-                | (Q(entry_type="SCHOLARSHIP_REVERSAL") & Q(amount__gt=0)),
+                | (Q(entry_type="SCHOLARSHIP_REVERSAL") & Q(amount__gt=0))
+                | (Q(entry_type="PAYMENT") & Q(amount__lt=0))
+                | (Q(entry_type="REFUND") & Q(amount__gt=0)),
                 name="ledgerentry_amount_sign_by_type",
             ),
-            # exactly one source FK, matching entry_type
+            # exactly one of the four source FKs, matching entry_type
             models.CheckConstraint(
-                condition=(
-                    Q(entry_type__in=LINE_ENTRY_TYPES)
-                    & Q(invoice_line__isnull=False)
-                    & Q(scholarship_allocation__isnull=True)
-                )
-                | (
-                    Q(entry_type__in=SCHOLARSHIP_ENTRY_TYPES)
-                    & Q(scholarship_allocation__isnull=False)
-                    & Q(invoice_line__isnull=True)
-                ),
+                condition=_exactly_one_source_matching_type(),
                 name="ledgerentry_source_matches_type",
             ),
         ]

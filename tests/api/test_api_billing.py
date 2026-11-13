@@ -477,6 +477,8 @@ def test_student_ledger(finance_api, invoice, assert_matches_openapi):
         "source_type": "INVOICE_LINE",
         "invoice_line": f"{INV}-L01",
         "scholarship_allocation": None,  # Phase 3: the second ledger source
+        "payment": None,  # Phase 4: the third and fourth ledger sources
+        "refund": None,
         "invoice": INV,
         "memo": "Tuition (16 credits)",
     }

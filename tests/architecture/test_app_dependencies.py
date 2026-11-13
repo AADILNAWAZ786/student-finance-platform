@@ -78,3 +78,16 @@ def test_scholarships_never_imports_payments_or_reconciliation():
 def test_scholarships_reaches_billing_only_through_its_public_modules():
     used = {where for top, where in _imports("scholarships") if top == "billing"}
     assert used, "scholarships posts to billing's ledger"
+
+
+def test_payments_never_imports_scholarships_and_registers_through_billing():
+    """Phase 4: payments and scholarships never import each other; payments reaches
+    scholarship precedence (BR-ALC-06) only through billing's registry."""
+    assert not {top for top, _ in _imports("payments")} & {
+        "scholarships",
+        "reconciliation",
+        "datagen",
+    }
+    apps_py = (ROOT / "payments" / "apps.py").read_text(encoding="utf-8")
+    assert "from billing.allocations import" in apps_py
+    assert "register_payment_release_handler" in apps_py

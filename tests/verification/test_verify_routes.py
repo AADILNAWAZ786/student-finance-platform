@@ -1,4 +1,4 @@
-"""V-ROUTE: every Phase 1, 2 and 3 URL × every HTTP method (actual routes from the URL resolver).
+"""V-ROUTE: every Phase 1, 2, 3 and 4 URL × every HTTP method (actual routes from the URL resolver).
 
 Allowed methods must not return 405; every other method must return the documented
 405 envelope with an ``Allow`` header. Unknown or malformed URLs under /api/ must also
@@ -12,6 +12,8 @@ pytestmark = pytest.mark.django_db(databases="__all__")
 
 FEE = "FEE-PRG-001-2026-FALL-TUITION-DOM-V1"
 INV = "INV-STU-000001-2026-000001"
+PAY = "PAY-2026-000001"
+REF = "REF-2026-000001"
 
 # (route template, concrete path, allowed methods besides HEAD/OPTIONS)
 ROUTES = [
@@ -46,6 +48,18 @@ ROUTES = [
     ("eligibility-checks", "/api/v1/scholarships/eligibility-checks/", {"POST"}),
     ("scholarship", "/api/v1/scholarships/SCH-2026-000001/", {"GET"}),
     ("scholarship-apply", "/api/v1/scholarships/SCH-2026-000001/apply/", {"POST"}),
+    # Phase 4: payments and refunds (read + action only; no deallocation route, D-P10)
+    ("payments", "/api/v1/payments/", {"GET", "POST"}),
+    ("payment", f"/api/v1/payments/{PAY}/", {"GET"}),
+    ("payment-allocate", f"/api/v1/payments/{PAY}/allocate/", {"POST"}),
+    ("payment-allocations", f"/api/v1/payments/{PAY}/allocations/", {"GET"}),
+    ("payment-allocations-all", "/api/v1/payment-allocations/", {"GET"}),
+    ("refunds", "/api/v1/refunds/", {"GET", "POST"}),
+    ("refund", f"/api/v1/refunds/{REF}/", {"GET"}),
+    ("refund-approve", f"/api/v1/refunds/{REF}/approve/", {"POST"}),
+    ("refund-process", f"/api/v1/refunds/{REF}/process/", {"POST"}),
+    ("refund-reject", f"/api/v1/refunds/{REF}/reject/", {"POST"}),
+    ("student-refundable", "/api/v1/students/STU-000001/refundable/", {"GET"}),
 ]
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 DISALLOWED = [
@@ -83,7 +97,7 @@ def test_route_table_matches_resolver():
                 yield prefix + str(p.pattern)
 
     api = sorted(r for r in walk(get_resolver()) if r.startswith("api/v1/"))
-    assert len(api) == len(ROUTES) == 29  # Phase 1: 11, Phase 2: +12, Phase 3: +6
+    assert len(api) == len(ROUTES) == 40  # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11
 
 
 @pytest.mark.parametrize(
@@ -124,6 +138,10 @@ def test_allowed_methods_are_not_405_and_options_works(world, name, path, allowe
         "/api/v1/eligibility/ELG-2026-000001/",  # no eligibility detail route
         "/api/v1/scholarships/sch-2026-000001/",
         "/api/v1/scholarships/SCH-2026-000001/revoke/",  # D-S14: no revoke route
+        f"/api/v1/payments/{PAY}/deallocate/",  # D-P10: deallocation is a service only
+        "/api/v1/payment-allocations/ALLOC-PAY-2026-000001-01/",  # no allocation detail route
+        f"/api/v1/refunds/{REF}/cancel/",  # the refund lifecycle has no CANCELLED status
+        "/api/v1/students/STU-000001/refunds/",
         "/api/v1/does-not-exist/",
         "/api/v2/students/",
     ],

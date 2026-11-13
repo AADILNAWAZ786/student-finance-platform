@@ -1,0 +1,255 @@
+Phase 4 (payments and refunds): verification results
+====================================================
+Date: 2026-11-13. Every result below was produced by running the real project.
+UPDATED for the corrective delta (P4-B1..B3: Payment and Refund immutability, read-only admin);
+see section 11. The current totals are 2108 passed, 2 xfailed on Python 3.14.6. Sections 1-10
+describe the first Phase 4 delivery (2088 passed).
+Base: the Phase 3 code as merged and pushed to github.com/AADILNAWAZ786/student-finance-platform
+(main, commit d8d90f2); the working copy was compared file by file with that commit before
+starting (identical except .gitignore, which is not part of this delta).
+Approved plan: Phase 4 plan revision 2, with D-P13a Option A and the three implementation
+conditions (see docs/KNOWN_LIMITATIONS.md, "Phase 4 policy decisions").
+Frozen docs (ARCHITECTURE.md, DATABASE_DESIGN.md v1.1) and every existing migration file are
+unchanged. students/, academics/ and scholarships/ code is unchanged.
+
+Environments: Python 3.14.6 (required; CPython via uv, pinned requirements.txt: Django 5.2.19,
+DRF 3.18.3, drf-spectacular 0.30.0, pytest 9.2.0, ruff 0.17.4) and Python 3.12.3 (additional).
+SQLite 3.53.1 (3.14.6 build). No new dependency.
+
+1. Project checks (Python 3.14.6; the same on 3.12.3)
+-----------------------------------------------------
+manage.py check                                   System check identified no issues (0 silenced).
+manage.py makemigrations --check --dry-run        No changes detected
+manage.py spectacular --validate --fail-on-warn   exit 0, no warnings
+ruff check . / ruff format --check . (0.17.4)     All checks passed! / 187 files already formatted
+(Every manage.py command during development ran with scratch settings pointing both databases
+at /tmp, so none of them could open the owner's local databases; see section 10.)
+
+2. Migrations (additive; existing migration files untouched)
+-------------------------------------------------------------
+payments/0001_initial   4 x CreateModel (Payment, PaymentAllocation, Refund, RefundEvent) with
+                        their FKs, CHECKs and indexes folded in; SQL = CREATE TABLE / CREATE
+                        INDEX on payments_* tables only (4 tables).
+                        Depends on academics 0002, billing 0002, students 0001.
+billing/0003_ledger_payment_sources
+                        AddField(payment) + AddField(refund) (OneToOne, NULL, UNIQUE) +
+                        AlterField(entry_type: 7 values) + 3 x RemoveConstraint/AddConstraint
+                        (entry_type enum, amount sign by type: PAYMENT < 0, REFUND > 0;
+                        exactly one of the four sources, matching the type).
+                        Depends on billing 0002 and payments 0001 (no cycle).
+                        SQL touches billing_ledgerentry only: 8 rebuilds, each copying every
+                        row with INSERT ... SELECT; the two that add a column copy NULL into
+                        it. No UPDATE or DELETE.
+
+Rehearsal on a POPULATED Phase 3 database (built in /tmp with the merged Phase 3 code from the
+Git clone, through Phase 1-3 services: 2 programs, 30 students, 40 enrollments, 40 invoices
+(spring and fall, one VOID), 273 invoice lines, 285 ledger entries = CHARGE 227, LATE_FEE 39,
+ADJUSTMENT 7, SCHOLARSHIP_CREDIT 12; 210 eligibility rows; 12 scholarships applied):
+    backup (Python sqlite3 backup API)   integrity_check: ok
+    migrate                         Applying payments.0001_initial... OK
+                                    Applying billing.0003_ledger_payment_sources... OK
+    migrate --database=ground_truth recorded only; no payments_* table there
+    tables compared: 28; domain rows changed or removed: 0
+    ledger: payment_id / refund_id NULL on all 285 existing entries
+    added by Django post_migrate (standard): django_content_type +4, auth_permission +16
+        (only additions, nothing changed or removed)
+    PRAGMA integrity_check: ok; PRAGMA foreign_key_check: no rows
+    payments tables created empty
+Rollback rehearsal (on a copy): migrate payments zero unapplied billing 0003 then payments 0001;
+    every domain table identical to the pre-migration snapshot (rows and columns).
+Use after migration (on a copy): 30 payments (SELF/GUARDIAN/SPONSOR, AUTO), 146 allocation
+    rows, 10 refunds requested -> approved -> processed; BR-BAL-02 identity held for all 30
+    students.
+Verification tests: migrating back to billing 0002 / payments zero and forward again keeps every
+Phase 1-3 row identical (tests/verification/test_verify_payments.py).
+Repeated with the tree merged from the ZIP, on a fresh copy of the same populated database,
+after running the Python backup script exactly as written in PHASE4_VERIFY.md §2
+(db.sqlite3: integrity=ok tables=30; ground_truth.sqlite3: integrity=ok tables=2): the same two
+migrations applied, 0 domain rows changed, the 285 ledger entries keep NULL sources. (The
+PowerShell lines around that script were not run here: no Windows host.)
+
+3. Test suite: everything implemented (Phases 0-4 + runnable unit tests)
+--------------------------------------------------------------------------
+pytest tests/core tests/config tests/architecture tests/models tests/services tests/api
+       tests/commands tests/verification tests/workflow
+       tests/unit/test_invoice_status.py tests/unit/test_invoice_lifecycle.py
+       tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py
+       tests/unit/test_full_ride_scholarship.py tests/unit/test_scholarship_calculators.py
+       tests/unit/test_payment_allocation.py tests/unit/test_payment_calculators.py -rxX
+
+    Python 3.14.6:   2088 passed, 2 xfailed, 0 failed     (Phase 3 baseline: 1772 passed, 2 xfailed)
+    Python 3.12.3:   2088 passed, 2 xfailed, 0 failed
+    Merged copy (3.14.6): 2088 passed, 2 xfailed, 0 failed   (a fresh copy of commit d8d90f2
+        with this ZIP extracted over it; identical file by file to the working tree)
+    (+316 tests; no Phase 0-3 test removed or skipped)
+
+XFAIL (unchanged, strict): the two blocked design rules (KNOWN_LIMITATIONS L1, L2)
+    test_verify_security.py::test_design_learner_reads_own_record
+    test_verify_security.py::test_design_instructor_reads_enrollments_of_own_program
+
+New Phase 4 test files (194 tests):
+    tests/unit/test_payment_allocation.py           9   frozen acceptance test (now runnable)
+    tests/unit/test_payment_calculators.py         22   caps, reservations, LIFO, credit
+    tests/models/test_payments_schema_contract.py  15   models vs DATABASE_DESIGN (one exception)
+    tests/models/test_payments_constraints.py      31   CHECK / UNIQUE / append-only, by name
+    tests/services/test_services_payments.py       43   record, AUTO, MANUAL, releases, 99 rows,
+                                                        BR-ALC-06, atomicity, balances
+    tests/services/test_services_refunds.py        26   caps, reservations, lifecycle, snapshot,
+                                                        atomicity, §7 worked example A-C
+    tests/services/test_concurrency.py              7   two-thread races (section 6)
+    tests/api/test_api_payments.py                 35   every endpoint, permissions, strict input
+    tests/verification/test_verify_payments.py      6   migration scope/rollback, ground truth,
+                                                        determinism, invariants
+Added to existing files (122 tests): 61 replayed OpenAPI examples, 11 routes x every method in
+the route table, workflow steps 6-9, the error-catalogue checks, one architecture check.
+
+4. Later-phase acceptance tests (excluded from the passing suite; reported separately)
+-------------------------------------------------------------------------------------
+test_payment_allocation.py is now runnable (9 passed). 4 files remain for later phases:
+    test_withdrawal_refund_pct.py   ModuleNotFoundError: No module named 'academics.calculators'   (5)
+    test_withdrawal_release.py      ImportError: cannot import name 'release_for_adjustment'
+                                    from 'billing.calculators'                                     (5)
+    test_worked_example.py          ModuleNotFoundError: No module named 'academics.calculators'
+                                    (also needs reconciliation.calculators)                        (5-6)
+    test_stage_rng.py               ModuleNotFoundError: No module named 'datagen.rng'             (7)
+The §7 worked example (Stages A-C) is rebuilt from services in
+test_services_refunds.py::test_worked_example_stages_a_to_c and every number matches: award
+86,000; PAY-1 60,000 -> L01; PAY-2 50,000 -> 37,000 allocated, 13,000 unallocated; after the
+withdrawal: releases PAY-2 L01 14,000, PAY-1 L01 30,400, PAY-2 L02 7,200; ledger -64,600 =
+0 - 64,600; max refundable 64,600; 35,000 against PAY-1 -> 422 REFUND_EXCEEDS_PAYMENT_AVAILABLE
+(30,400); after REF-1 34,200 (SPONSOR) and REF-2 30,400 (GUARDIAN): ledger 0, unallocated 0,
+net paid 45,400 = amount_paid; 14 ledger entries.
+
+5. Approved corrections and conditions, each with its test
+----------------------------------------------------------
+D-P7  net paid subtracts every refund not REJECTED; unallocated credit only PROCESSED ones
+      test_BR_REF_01_net_paid_subtracts_requested_approved_and_processed_refunds (unit),
+      test_BR_REF_01_net_paid_subtracts_pending_refunds (service: the pending refund turns a
+      payment-cap failure into a net-paid failure), test_unallocated_credit_subtracts_only_
+      processed_refunds_and_respects_as_of, test_full_lifecycle_posts_the_refund_entry_only_
+      when_processed (identity while pending and after processing)
+D-P8  approval/processing exclude the refund itself
+      test_refund_caps_leave_out_the_refund_being_approved_so_it_never_counts_twice,
+      test_full_lifecycle_... (a refund of the whole credit is approved and processed),
+      test_approval_rechecks_the_caps_after_a_late_fee, test_processing_rechecks_the_caps
+D-P9  received_date: 400 VALIDATION_ERROR, rule_id null, field received_date (both cases)
+D-P13 AUTO: NO_OPEN_LINES writes nothing and keeps the credit; NO_FUNDS_AVAILABLE separate;
+      ALLOCATION_EXCEEDS_PAYMENT only for a MANUAL total above available
+D-P13a ALLOCATION_LIMIT_REACHED (409): checked before writing, counting ALLOCATE and
+      DEALLOCATE rows plus every planned row, in allocation (MANUAL and AUTO), deallocation
+      and the BR-ALC-06 handler: test_D_P13a_* (3 tests); the 99th row is ALLOC-...-99
+D-P15 approve/reject on_date stored in RefundEvent.event_date (no new column; schema contract)
+Condition 2: max_refundable keeps (net_paid, credit_balance, payment_available)
+Condition 3: Refund.calculation never rewritten: test_calculation_snapshot_is_never_rewritten
+
+6. Concurrency (ARCHITECTURE §8.2), file-based test DB, transaction=True
+------------------------------------------------------------------------
+Two threads released together by a barrier; any "database is locked" fails the test.
+    two AUTO allocations of one payment       -> ALLOCATED + NO_FUNDS_AVAILABLE; Σ = payment
+    two payments, one line (LAB 6,000)        -> one ALLOCATED, one ALLOCATION_EXCEEDS_LINE_OPEN
+    two refunds from one payment (30,000)     -> one REQUESTED, one REFUND_EXCEEDS_PAYMENT_AVAILABLE
+    refunds sharing one credit balance        -> reservations hold (loser: CREDIT_BALANCE)
+    two approvals of one refund               -> APPROVED + ILLEGAL_TRANSITION
+    one external_reference twice              -> one payment + DUPLICATE_PAYMENT
+    scholarship apply vs payment on one line  -> APPLIED either way; line open >= 0; identity
+Result: 7 passed, 3 consecutive runs.
+Negative control (scratch settings only, never committed): with transaction_mode DEFERRED the
+same 7 tests all FAIL ("database is locked"), so the tests do detect a broken lock strategy.
+
+7. API and OpenAPI
+------------------
+Routes: 40 (Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11); every disallowed method
+returns the 405 envelope; no deallocation route (D-P10), no allocation detail route.
+Documented error examples: 209 (Phase 1-3: 148, Phase 4: +61), every one replayed against the
+live API and equal to the response (code, rule_id, message, details).
+Schema compatibility with Phase 3: no component removed or renamed (the scholarship
+AllocationTypeEnum name is pinned; see section 9). Changed components, all additive:
+EntryTypeEnum (+PAYMENT, +REFUND), LedgerEntry (+payment, +refund), Balance /
+BalanceBreakdown (help texts), Statement / StatementInvoice (typed payment allocations and
+refunds instead of empty lists).
+Permissions (D-P3): platform_admin all writes; support_staff reads everything and POST /refunds/
+only (approve/process/reject, payments, allocate: 403); learner, instructor, academic_admin:
+403 on every payments endpoint.
+
+8. Changes to existing tests (no assertion weakened; each keeps its intent)
+---------------------------------------------------------------------------
+tests/services/test_services_scholarships.py (D-P17)
+    test_payment_release_without_handler_fails_loudly_and_rolls_back: removes the real
+        "payments" handler for the test (monkeypatch.delitem), same assertions.
+    test_payment_release_handler_receives_the_amounts_when_registered: a real payment AUTO-
+        allocated (100,000 on tuition) and the real handler wrapped by a spy; same assertions
+        (release 31,000; scholarship 75,000, paid 69,000) plus the DEALLOCATE row itself.
+    test_registry_registration_is_idempotent_and_conflicts_raise: payment_release == ["payments"].
+tests/models/test_billing_schema_contract.py (D-P17): STAGED_COLUMNS / STAGED_ENTRY_TYPES are
+    empty; the staged-sources test now proves all four sources name their design models.
+tests/verification/test_verify_scholarships.py: the migrate-back test compared "every
+    non-scholarship table"; Phase 4's tables and ledger columns are now excluded the same way
+    (Phase 1/2 rows over Phase 2 columns, as its docstring says). Not in the D-P17 list; found
+    by the regression run.
+tests/core/test_exceptions.py: the 18 documented codes are checked against ARCHITECTURE §10's
+    own list; one new test pins the single approved extension (D-P13a).
+tests/api/test_api_billing.py: the ledger row gains "payment": None, "refund": None (P4-O3).
+tests/verification/test_verify_openapi_examples.py, test_verify_routes.py: Phase 4 operations,
+    recipes and routes added; counts 148 -> 209 and 29 -> 40.
+tests/workflow/test_end_to_end.py: steps 6-9 added (planned as a separate file).
+tests/architecture/test_app_dependencies.py: one explicit Phase 4 import test added.
+tests/{api,models,services,verification}/conftest.py: also load tests/payment_fixtures.py.
+
+9. Problems found and fixed during implementation (before delivery)
+-------------------------------------------------------------------
+- Nested allocation lines silently ignored unknown fields (StrictInputMixin only sees the root
+  serializer's input). Found by a new API test; fixed in AllocationLineSerializer the way
+  billing's WaiverSerializer already does it.
+- Adding payment enums renamed Phase 3's OpenAPI component AllocationTypeEnum (an enum-name
+  collision). Found by comparing the Phase 3 and Phase 4 schemas; both names are now pinned in
+  ENUM_NAME_OVERRIDES, so no Phase 3 component changes name.
+- My own test errors, corrected to the real behaviour: the verification world's invoice date
+  (2026-08-20, not 08-17); DRF's nested error format ({"0": {...}}); the credit cap is checked
+  before the payment cap; two miscounted row totals (10 allocation rows, 8 refund events).
+
+10. Local data
+--------------
+The owner's db.sqlite3 and ground_truth.sqlite3 were never opened or migrated:
+    db.sqlite3            131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f (unchanged)
+    ground_truth.sqlite3  ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20 (unchanged)
+Tests use the file test databases (test_db.sqlite3, test_ground_truth.sqlite3), created and
+removed by pytest-django.
+
+11. Corrective delta after review (P4-B1..B3)
+---------------------------------------------
+Applied on top of the first Phase 4 delta (same base, commit d8d90f2).
+P4-B1  Payment.save() refuses any update of a persisted payment (AppendOnlyError);
+       inserts unchanged.
+P4-B2  Refund.save(): only status and processed_date may change after insertion; any change to
+       refund_id, student, payment, payer_type, enrollment, reason, amount, requested_date,
+       calculation or recorded_at (or update_fields naming one) raises AppendOnlyError before
+       anything is written; only the two mutable columns are written. Loaded values are
+       deep-copied, so an in-place change to the calculation dict is also refused (the first
+       version of the guard missed this; the new test caught it before delivery).
+P4-B3  payments/admin.py: Payment, PaymentAllocation, Refund, RefundEvent registered read-only
+       (no add, change or delete permission, even for a superuser).
+
+New tests (20):
+    tests/models/test_payments_immutability.py  17   payment amount / payer_type changes and
+        any re-save rejected (row unchanged); refund calculation (replaced and mutated in
+        place), amount, source payment, payer_type, reason, requested_date, refund_id, student,
+        enrollment and update_fields with an immutable field rejected (row unchanged); status
+        is still saveable; REQUESTED -> APPROVED -> PROCESSED and REJECTED via services still
+        work and the stored calculation equals the request-time snapshot after every step
+    tests/api/test_admin_payments.py             3   the four models registered without add /
+        change / delete permission; changelist and change pages load (view only, no save
+        button); add and delete pages 403; POSTed edits to a payment and a refund are 403 and
+        leave the rows unchanged
+No existing test was changed.
+
+Results (Python 3.14.6, ruff 0.17.4):
+    ruff check . / ruff format --check .        All checks passed! / 190 files already formatted
+    manage.py check                             System check identified no issues (0 silenced).
+    makemigrations --check --dry-run            No changes detected (the guards are Python-only;
+                                                no schema change, no new migration)
+    spectacular --validate --fail-on-warn       exit 0; schema byte-identical to the first
+                                                Phase 4 delivery
+    full Phase 0-4 suite                        2108 passed, 2 xfailed, 0 failed
+    merged copy (commit d8d90f2 + first Phase 4 ZIP + this corrective ZIP)
+                                                2108 passed, 2 xfailed, 0 failed
+Local databases: never opened; hashes unchanged (section 10).

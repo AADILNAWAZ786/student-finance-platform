@@ -448,7 +448,9 @@ def test_line_room_after_adjustment_allows_what_fits(scholarship_types, invoice,
     assert award.allocations.first().allocated_on == date(2026, 9, 10)  # after the adjustment
 
 
-# --- BR-ALC-06 payment-release hook (no payments in Phase 3) --------------------------------------
+# --- BR-ALC-06 payment-release hook ---------------------------------------------------------------
+# Phase 4 registers the real handler ("payments"). The first test removes it for the duration of
+# the test, to keep proving that a missing handler fails loudly and rolls back (D-P17).
 
 
 def test_payment_release_without_handler_fails_loudly_and_rolls_back(
@@ -459,6 +461,7 @@ def test_payment_release_without_handler_fails_loudly_and_rolls_back(
         NS(invoice_line_id=tuition, amount=D("100000.00"), payer_type="SELF", allocated_on=ISSUE)
     ]
     monkeypatch.setitem(registry._providers["payment"], "test-only", lambda inv: fake)
+    monkeypatch.delitem(registry._release_handlers, "payments")  # as if payments were absent
     before, seq = _counts(), list(IdSequence.objects.values_list("key", "last_value"))
     with pytest.raises(PaymentReleaseUnavailable, match="SCH-2026-000001"):
         services.apply_scholarship(merit_award, actor="t")
@@ -471,26 +474,40 @@ def test_payment_release_without_handler_fails_loudly_and_rolls_back(
 def test_payment_release_handler_receives_the_amounts_when_registered(
     merit_award, invoice, monkeypatch
 ):
+    """Phase 4: a real payment (AUTO → tuition 100,000) and the real "payments" handler,
+    wrapped only to record the call it receives."""
+    from payments import services as payments
+    from payments.models import PaymentAllocation
+
     tuition = f"{invoice.pk}-L01"
-    fake = [
-        NS(invoice_line_id=tuition, amount=D("100000.00"), payer_type="SELF", allocated_on=ISSUE)
-    ]
-    calls = []
+    payment, _ = payments.record_payment(
+        student=invoice.student,
+        amount=D("100000.00"),
+        received_date=ISSUE,
+        method="UPI",
+        payer_type="SELF",
+        external_reference="UTR-SCH-PRECEDENCE",
+        auto_allocate=True,
+        actor="t",
+    )
+    calls, real = [], registry._release_handlers["payments"]
 
-    def handler(**kw):  # stands in for Phase 4's LIFO deallocation
+    def spy(**kw):
         calls.append(kw)
-        for line_id, amount in kw["releases"].items():
-            fake.append(
-                NS(invoice_line_id=line_id, amount=-amount, payer_type="SELF", allocated_on=ISSUE)
-            )
+        return real(**kw)
 
-    monkeypatch.setitem(registry._providers["payment"], "test-only", lambda inv: list(fake))
-    monkeypatch.setitem(registry._release_handlers, "test-only", handler)
+    monkeypatch.setitem(registry._release_handlers, "payments", spy)
     services.apply_scholarship(merit_award, actor="t")
     assert calls[0]["releases"] == {tuition: D("31000.00")}  # 100,000 + 75,000 − 144,000
     assert calls[0]["source_ref"] == "SCH-2026-000001"
     a = billing.current_amounts(invoice)
     assert (a.scholarship_applied, a.amount_paid) == (D("75000.00"), D("69000.00"))
+    released = PaymentAllocation.objects.get(allocation_type="DEALLOCATE")
+    assert (released.amount, released.rule_applied, released.reverses.payment_id) == (
+        D("-31000.00"),
+        "SCHOLARSHIP_PRECEDENCE",
+        payment.payment_id,
+    )
 
 
 def test_zero_releases_never_need_a_handler(merit_award):
@@ -638,7 +655,7 @@ def test_registry_registration_is_idempotent_and_conflicts_raise():
         registry.register_allocation_provider("scholarship", "scholarships", lambda inv: [])
     with pytest.raises(ValueError):
         registry.register_allocation_provider("refund", "x", lambda inv: [])
-    assert registry.registered()["payment_release"] == []  # Phase 4 registers it
+    assert registry.registered()["payment_release"] == ["payments"]  # registered in Phase 4
 
 
 def test_invoice_queries_never_see_other_invoices_allocations(

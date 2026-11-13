@@ -1,6 +1,7 @@
-# Known limitations (unresolved) and Phase 2–3 policy decisions
+# Known limitations (unresolved) and Phase 2–4 policy decisions
 
-Status as of the Phase 3 (scholarships) delivery (2026-11-13). L1 and L2 are **not implemented**.
+Status as of the Phase 4 (payments and refunds) delivery (2026-11-13). L1 and L2 are **not
+implemented**.
 The frozen design documents (`ARCHITECTURE.md`, `DATABASE_DESIGN.md` v1.1) are unchanged;
 resolving L1/L2 needs a design decision by the project owner.
 
@@ -11,8 +12,8 @@ resolving L1/L2 needs a design decision by the project owner.
   `Student`, so the API cannot tell which student record belongs to a learner.
 - **Current behaviour (tested, passing):** users in the `learner` group get
   `403 PERMISSION_DENIED` on every students, programs, terms and enrollments endpoint, and
-  (Phases 2–3) on every billing and scholarship endpoint, including `/students/{id}/statement/`
-  and `/balance/`.
+  (Phases 2–4) on every billing, scholarship, payment and refund endpoint, including
+  `/students/{id}/statement/`, `/balance/` and `/refundable/`.
 - **Test:** `tests/verification/test_verify_security.py::test_design_learner_reads_own_record`
   is marked `xfail(strict=True)`. It reports as **XFAIL** until the rule is implemented. If
   it ever starts passing without a deliberate change, the strict marker turns it into a failure.
@@ -29,6 +30,67 @@ resolving L1/L2 needs a design decision by the project owner.
 **Resolving L1 and L2** needs a model addition, for example an optional one-to-one
 `Student.user` and an instructor↔program bridge table. That changes the frozen design, so it
 was not done in Phase 1.
+
+## Phase 4 policy decisions (approved before implementation, plan revision 2)
+
+| # | Decision | Implemented as |
+|---|---|---|
+| D-P1 | `Payment.method` is Char(14) in the design but `SPONSOR_TRANSFER` has 16 characters | Char(16); see P4-O1. |
+| D-P2 | `docs/BUSINESS_RULES.md` does not exist | The rules are taken from ARCHITECTURE §6. No file created. |
+| D-P3 | Who may request a refund | `POST /refunds/`: platform_admin and support_staff (§13). Approve / process / reject, payments and allocation: platform_admin only. Everyone else (learners included): 403. |
+| D-P4 | Billing needs payment and refund data without importing payments | Two student-level registry kinds in `billing/allocations.py`: `student_credit` (unallocated credit from the payment rows) and `refunds` (for statements). Payment / refund totals come from billing's own PAYMENT / REFUND ledger rows; the payer split from the `payment__payer_type` relation. |
+| D-P5 | `invoice_amounts` reads `payer_type` from allocations | Read-only `PaymentAllocation.payer_type` property (the payment's). No column. |
+| D-P6 | `allocated_on` | Required for MANUAL; defaults to the payment's `received_date` for AUTO and `record_payment`. A 2026 business date, on or after `received_date` and the line's posted date. |
+| D-P7 | Net paid, credit, reservations (**corrected in revision 2**) | Net paid (BR-REF-01) = Σ payments − Σ refunds **not REJECTED**. Credit available = ledger credit balance (BR-REF-02: −balance if negative) − Σ REQUESTED/APPROVED refunds, ≥ 0. Unallocated credit (BR-BAL-02) subtracts PROCESSED refunds only, so the ledger identity holds while refunds are pending. |
+| D-P8 | Re-checking caps | All three caps are re-checked at approval and at processing, inside the transaction, with the refund itself left out of net paid, the pending reservations and its payment's refunds. Rejection checks nothing. |
+| D-P9 | `received_date` before the first invoice / no invoice (**corrected in revision 2**) | A DATABASE_DESIGN SV rule, not BR-PAY-01: 400 VALIDATION_ERROR, `rule_id: null`, field `received_date`. |
+| D-P10 | Deallocation endpoint | None. `payments.services.deallocate` is a service (BR-ALC-06 now, WITHDRAWAL_/CANCELLATION_RELEASE in Phase 5). |
+| D-P11 | BR-ALC-06 release | LIFO across the line's payments by (`allocated_on`, `allocation_id`) descending, `rule_applied = SCHOLARSHIP_PRECEDENCE`; freed money stays unallocated credit (not re-allocated). |
+| D-P12 | AUTO scope | FEE / LATE_FEE lines, posted on or before `allocated_on`, on ISSUED or CANCELLED invoices; never VOID. |
+| D-P13 | AUTO with nothing to do (**corrected in revision 2**) | No open lines: no rows, the money stays unallocated credit, 200 `outcome: NO_OPEN_LINES` (BR-ALC-04). Nothing available: no rows, 200 `outcome: NO_FUNDS_AVAILABLE`. `ALLOCATION_EXCEEDS_PAYMENT` only for a MANUAL total above the available amount. |
+| D-P13a | The 99-row allocation ID limit (**Option A approved**) | New 409 domain code `ALLOCATION_LIMIT_REACHED`; see P4-O2. Checked before anything is written, counting every existing row (ALLOCATE and DEALLOCATE) plus the rows planned, in normal allocation, deallocation and the BR-ALC-06 handler. |
+| D-P14 | Refund reasons | The API accepts OVERPAYMENT only. Model, CHECKs and service support all three; WITHDRAWAL / CANCELLATION (with enrollment and `schedule_pct`) are created by Phase 5. |
+| D-P15 | Approval / rejection dates (**corrected in revision 2**) | Required `on_date` in the request body, stored in the inherited `StatusEventBase.event_date`. No extra column. `processed_date` is a 2026 date on or after the latest status date. |
+| D-P16 | Refund source | One payment per refund. |
+| D-P17 | Phase 3 tests that assumed no payments handler | Updated with the same intent (see PHASE4_VERIFY.md). |
+| D-P18 | Billing placeholders | Statement payment allocations and refunds, balance payments / refunds / unallocated credit now filled; response shapes unchanged except the additive fields in P4-O3. |
+| D-P19 | `tests/unit/test_worked_example.py` | Still deferred (needs Phase 5/6 modules). §7 Stages A–C are rebuilt from services in `tests/services/test_services_refunds.py`. |
+| D-P20 | PaymentEvent | None (not in the design); payment effects show as InvoiceEvents and RefundEvents. |
+
+**Implementation conditions set at approval (all met and tested):**
+1. The 99-row capacity check counts all existing PaymentAllocation rows (ALLOCATE and
+   DEALLOCATE) plus every row planned in the transaction, before writing, in normal
+   allocation, deallocation and the BR-ALC-06 handler
+   (`test_D_P13a_*` in `tests/services/test_services_payments.py`).
+2. `max_refundable(net_paid, credit_balance, payment_available)` keeps its frozen signature
+   (`test_max_refundable_keeps_the_frozen_signature`); the reservation figures are computed by
+   separate, separately tested functions (`pending_reservations`, `credit_available`,
+   `refund_caps`).
+3. `Refund.calculation` is the request-time snapshot; approval and processing re-check the caps
+   in their own transactions without rewriting it (`test_calculation_snapshot_is_never_rewritten`).
+
+## Phase 4 observations
+
+| # | Observation | Current behaviour |
+|---|---|---|
+| P4-O1 | **Design inconsistency:** DATABASE_DESIGN gives `Payment.method` as Char(14), but lists `SPONSOR_TRANSFER` (16 characters). | Char(16), the minimum that stores every documented value (D-P1). The design doc is unchanged; `tests/models/test_payments_schema_contract.py` allows exactly this one documented exception. **Needs owner confirmation.** |
+| P4-O2 | **Approved exception to the 18-code catalogue:** `ALLOCATION_LIMIT_REACHED` (409). The frozen ID format `ALLOC-{payment_id}-NN` allows 99 rows per payment, deallocations included, and no existing code describes "no ID space left". | `core.exceptions.EXTENSION_DOMAIN_ERROR_CODES`; the 18 documented codes stay in `DOCUMENTED_DOMAIN_ERROR_CODES`, checked against ARCHITECTURE §10 by `tests/core/test_exceptions.py`. Documented on `POST /payments/{id}/allocate/` with a replayed example. `rule_id` is null (no BR rule). |
+| P4-O3 | `/students/{id}/ledger/` entries gained `payment` and `refund` fields (null for other sources); `source_type` can be PAYMENT or REFUND. | Additive response change; the Phase 2 ledger test's expected dict gained the two keys. |
+| P4-O4 | `Refund.calculation` keeps the four design keys (`net_paid`, `credit_balance`, `payment_available`, `schedule_pct`) plus `pending_refunds`, `credit_available` and `max_refundable`. | `credit_balance` is the BR-REF-02 ledger credit balance; the extra keys show the reservations that were subtracted from it. Money as strings. |
+| P4-O5 | Allocation state (`UNALLOCATED` / `PARTIAL` / `FULL`) is not defined further by the design. | Compares net allocations with the payment amount: 0 → UNALLOCATED, = amount → FULL, otherwise PARTIAL (a partly refunded, otherwise fully used payment is PARTIAL). |
+| P4-O6 | `REFUND_EXCEEDS_NET_PAID` can bind only when the credit balance exceeds net paid, which a consistent ledger reaches only with credits not yet followed by their releases (e.g. a withdrawal adjustment before the Phase 5 scholarship reversal). | Enforced and tested with such an injected adjustment (service test and replayed OpenAPI example). Net paid is always checked first. |
+| P4-O7 | `GET /students/{id}/refundable/` is served by the payments app. | Billing (which serves the other student account views) may not import payments. Same URL, same permissions. |
+| P4-O8 | Docstrings in `scholarships/services.py` still say no payment allocations exist (Phase 3 wording). | Behaviour is correct (BR-ALC-06 releases real allocations); the file was not in the approved Phase 4 change list, so the wording is left for the next scholarships change. |
+
+## Defects fixed in the Phase 4 delta after review (corrective delta, before merge)
+
+| # | Defect | Fixed in |
+|---|---|---|
+| P4-B1 | `Payment` refused deletion but not updates: saving a persisted payment would have rewritten it. | `Payment.save()` raises `AppendOnlyError` for any persisted payment; inserts are unchanged. |
+| P4-B2 | `Refund` did not protect its financial and audit fields at model level: only the services avoided changing them. | `Refund.save()`: after insertion only `status` and `processed_date` may change (`MUTABLE_FIELDS`); a change to any of `refund_id`, `student`, `payment`, `payer_type`, `enrollment`, `reason`, `amount`, `requested_date`, `calculation`, `recorded_at` (`IMMUTABLE_FIELDS`), or `update_fields` naming one, raises `AppendOnlyError` before anything is written, and only the two mutable columns are ever written. The loaded values are deep-copied, so mutating `calculation` in place is also caught (found by the new tests). |
+| P4-B3 | No Django Admin registration for the payments models (`payments/admin.py` missing; Phase 3 had one for scholarships). | `payments/admin.py` registers Payment, PaymentAllocation, Refund and RefundEvent read-only: no add, change or delete permission, even for superusers. |
+
+`QuerySet.update()` bypasses model methods; no payments code uses it on these tables.
 
 ## Phase 3 policy decisions (approved before implementation)
 
@@ -68,7 +130,7 @@ was not done in Phase 1.
 **BR-ALC-06 (Phase 4 dependency):** apply asks billing's payment-release hook to free payment
 money on the lines it covers. No payment allocations exist in Phase 3; a non-zero release with
 no registered handler raises `PaymentReleaseUnavailable` and rolls the whole application back.
-Phase 4 registers the LIFO deallocator.
+Phase 4 registered the LIFO deallocator (see the Phase 4 decisions above).
 
 ## Phase 3 observations
 

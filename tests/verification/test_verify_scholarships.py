@@ -80,15 +80,17 @@ def test_billing_0002_only_touches_the_ledger_table():
     assert inserts and all("SELECT" in s and 'FROM "billing_ledgerentry"' in s for s in inserts)
 
 
-NEW_COLUMNS = {"billing_ledgerentry": {"scholarship_allocation_id"}}  # added by billing 0002
+# columns added after Phase 2: billing 0002 (Phase 3) and billing 0003 (Phase 4)
+NEW_COLUMNS = {"billing_ledgerentry": {"scholarship_allocation_id", "payment_id", "refund_id"}}
+LATER_PHASE_TABLES = ("scholarships_", "payments_")  # created after Phase 2
 
 
 def _rows():
-    """Every Phase 1/2 row of every non-scholarship table, over the Phase 2 columns only."""
+    """Every Phase 1/2 row of every Phase 1/2 table, over the Phase 2 columns only."""
     out = {}
     with connection.cursor() as cur:
         for table in sorted(connection.introspection.table_names()):
-            if table.startswith("scholarships_") or table == "django_migrations":
+            if table.startswith(LATER_PHASE_TABLES) or table == "django_migrations":
                 continue
             cols = [
                 c.name

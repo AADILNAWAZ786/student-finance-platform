@@ -14,7 +14,10 @@ Rules enforced here (SV rules of DATABASE_DESIGN.md §3 and ARCHITECTURE §6.1):
   Void          lifecycle ISSUED; current scholarship_applied = amount_paid = 0
                 (409 INVOICE_HAS_ALLOCATIONS, BR-INV-08); explicit void_date (D15)
   Late fees     BR-LATE-01, explicit as_of_date (D8)
-  Ledger        exactly one entry per invoice line (BR-LED-01), via ``post_ledger`` only
+  Ledger        exactly one entry per source row (BR-LED-01): ``post_ledger`` (invoice
+                lines), ``post_scholarship_ledger`` (scholarship allocations, Phase 3),
+                ``post_payment_ledger`` / ``post_refund_ledger`` (payments and processed
+                refunds, Phase 4). Higher apps pass plain objects; billing never imports them.
 """
 
 from __future__ import annotations
@@ -60,7 +63,7 @@ def allocations_for(invoice) -> tuple[list, list]:
     """(scholarship allocations, payment allocations) on the invoice's lines.
 
     Read from the allocation registry (``billing.allocations``, decision D-S1): the
-    scholarships app registers its provider (Phase 3) and payments will register theirs
+    scholarships app registers its provider (Phase 3) and payments registers theirs
     (Phase 4). Billing never imports either app. Every caller (amounts, open amounts, void,
     late fees, collection status, statement, balance) goes through this one function.
     """
@@ -181,6 +184,43 @@ def post_scholarship_ledger(allocation, *, student_id: str) -> LedgerEntry:
         invoice_line=None,
         scholarship_allocation_id=allocation.pk,
         memo=f"{allocation.allocation_type} {allocation.pk} on {allocation.invoice_line_id}"[:120],
+    )
+    entry.save(force_insert=True)
+    return entry
+
+
+def post_payment_ledger(payment) -> LedgerEntry:
+    """BR-LED-01 / BR-PAY-02 for a payment (a plain object; billing does not import
+    payments): one PAYMENT entry of −amount dated ``received_date``. The payment is credited
+    in full when received; allocations post nothing.
+    """
+    entry = LedgerEntry(
+        entry_id=next_id("ledger_entry", year=payment.received_date.year),
+        student_id=payment.student_id,
+        entry_date=payment.received_date,
+        entry_type="PAYMENT",
+        amount=calc.ledger_amount("PAYMENT", payment.amount),
+        payment_id=payment.pk,
+        memo=f"Payment {payment.pk} from {payment.payer_type} ({payment.method})"[:120],
+    )
+    entry.save(force_insert=True)
+    return entry
+
+
+def post_refund_ledger(refund) -> LedgerEntry:
+    """BR-LED-01 / BR-REF-03 for a PROCESSED refund (a plain object): one REFUND entry of
+    +amount dated ``processed_date``. Requested, approved and rejected refunds post nothing.
+    """
+    if refund.status != "PROCESSED" or refund.processed_date is None:
+        raise ValueError(f"{refund.pk} is {refund.status}; only a PROCESSED refund posts")
+    entry = LedgerEntry(
+        entry_id=next_id("ledger_entry", year=refund.processed_date.year),
+        student_id=refund.student_id,
+        entry_date=refund.processed_date,
+        entry_type="REFUND",
+        amount=calc.ledger_amount("REFUND", refund.amount),
+        refund_id=refund.pk,
+        memo=f"Refund {refund.pk} of {refund.payment_id} to {refund.payer_type}"[:120],
     )
     entry.save(force_insert=True)
     return entry
@@ -726,24 +766,39 @@ def refresh_collection_status(*, as_of: date, actor: str) -> dict:
 # --- student account views (read-only) -----------------------------------------------------------
 
 
+def student_refunds(student) -> list:
+    """The student's refunds (any status), from the payments provider (D-P4)."""
+    return [r for rows in allocation_registry.student_values("refunds", student) for r in rows]
+
+
+def unallocated_credit(student, as_of: date | None = None):
+    """BR-BAL-02 unallocated credit, computed by payments from its own rows (D-P4), so the
+    identity check compares two independent sources: the ledger and the payment records."""
+    return dsum(allocation_registry.student_values("student_credit", student, as_of=as_of))
+
+
 def student_balance(student, as_of: date | None) -> dict:
     """BR-BAL-01 ledger balance, its breakdown, and the BR-BAL-02 identity check.
 
-    Payment and refund components are 0 until Phase 4 adds their rows.
+    The breakdown is signed like the ledger: payments (and each payer's share) ≤ 0, refunds
+    ≥ 0. ``unallocated_credit`` comes from the payment rows, not from the ledger.
     """
-    entries = list(student.ledger_entries.all())
+    entries = list(student.ledger_entries.select_related("payment"))
     included = [e for e in entries if as_of is None or e.entry_date <= as_of]
     by_type = defaultdict(list)
+    by_payer = defaultdict(list)
     for e in included:
         by_type[e.entry_type].append(e.amount)
+        if e.entry_type == "PAYMENT":  # payer read through the relation; no app import
+            by_payer[e.payment.payer_type].append(e.amount)
     balance = calc.ledger_balance(entries, as_of)
     outstanding = dsum(
         current_amounts(inv, as_of=as_of).outstanding
         for inv in student.invoices.prefetch_related("lines")
         if as_of is None or inv.issue_date <= as_of
     )
-    unallocated_credit = ZERO  # Σ payments − Σ net payment allocations − Σ PROCESSED refunds
-    expected = round_money(outstanding - unallocated_credit)
+    credit = unallocated_credit(student, as_of)
+    expected = round_money(outstanding - credit)
     return {
         "student_id": student.student_id,
         "as_of": as_of,
@@ -754,12 +809,12 @@ def student_balance(student, as_of: date | None) -> dict:
             "adjustments": dsum(by_type["ADJUSTMENT"]),
             "scholarship_credits": dsum(by_type["SCHOLARSHIP_CREDIT"]),
             "scholarship_reversals": dsum(by_type["SCHOLARSHIP_REVERSAL"]),
-            "payments": ZERO,
-            "payments_by_payer": {p: ZERO for p in calc.PAYER_TYPES},
-            "refunds": ZERO,
+            "payments": dsum(by_type["PAYMENT"]),
+            "payments_by_payer": {p: dsum(by_payer[p]) for p in calc.PAYER_TYPES},
+            "refunds": dsum(by_type["REFUND"]),
         },
         "invoice_outstanding": outstanding,
-        "unallocated_credit": unallocated_credit,
+        "unallocated_credit": credit,
         "identity": {
             "rule_id": "BR-BAL-02",
             "holds": balance == expected,

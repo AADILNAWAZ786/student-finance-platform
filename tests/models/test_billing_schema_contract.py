@@ -1,9 +1,9 @@
 """The billing models match DATABASE_DESIGN.md §3 (billing), read from the frozen document.
 
-Four tables must match the design exactly. LedgerEntry is staged (decision D1): the only
-differences allowed are the source columns and entry types that later phases add, listed
-in STAGED below. When a later phase adds one, it must be removed from STAGED, so the final
-schema is proved equal to the design.
+Every billing table must match the design exactly. LedgerEntry was staged (decision D1):
+later phases added its source columns and entry types, each one removed from STAGED below
+when it was built. Phase 4 built the last two (payment / refund, PAYMENT / REFUND), so STAGED
+is empty and LedgerEntry is proved equal to the design.
 """
 
 import re
@@ -19,9 +19,10 @@ from billing.calculators import LEDGER_SIGN
 DESIGN = Path(settings.BASE_DIR) / "docs" / "DATABASE_DESIGN.md"
 
 # column / entry type -> the phase that adds it (ARCHITECTURE §16). Phase 3 added
-# scholarship_allocation, SCHOLARSHIP_CREDIT and SCHOLARSHIP_REVERSAL (billing 0002).
-STAGED_COLUMNS = {"payment": 4, "refund": 4}
-STAGED_ENTRY_TYPES = {"PAYMENT": 4, "REFUND": 4}
+# scholarship_allocation, SCHOLARSHIP_CREDIT and SCHOLARSHIP_REVERSAL (billing 0002); Phase 4
+# added payment, refund, PAYMENT and REFUND (billing 0003). Nothing is staged any more.
+STAGED_COLUMNS: dict[str, int] = {}
+STAGED_ENTRY_TYPES: dict[str, int] = {}
 
 
 def _section(text: str, start: str, end: str) -> str:
@@ -129,18 +130,25 @@ def test_D1_ledger_entry_is_the_design_minus_the_staged_sources(design):
     assert set(actual) & set(STAGED_COLUMNS) == set()
     for name, field in actual.items():
         _check_type(field, expected[name])
-    for source in ("invoice_line", "scholarship_allocation"):
+    for source in ("invoice_line", "scholarship_allocation", "payment", "refund"):
         assert actual[source].unique and actual[source].null  # "U", optional source
 
 
-def test_D1_staged_sources_name_their_design_models(design):
+def test_D1_staging_is_complete_and_every_source_names_its_design_model(design):
+    assert STAGED_COLUMNS == {} and STAGED_ENTRY_TYPES == {}  # Phase 4 built the last ones
     rows = {name: (t, rest) for name, t, rest in design["LedgerEntry"]}
-    assert {k: rows[k][0] for k in STAGED_COLUMNS} == {
-        "payment": "→ Payment",
-        "refund": "→ Refund",
+    sources = {
+        "invoice_line": "→ InvoiceLine",
+        "scholarship_allocation": "→ ScholarshipAllocation",  # Phase 3
+        "payment": "→ Payment",  # Phase 4
+        "refund": "→ Refund",  # Phase 4
     }
-    assert rows["scholarship_allocation"][0] == "→ ScholarshipAllocation"  # Phase 3: built
-    assert all(rows[k][1].rstrip().endswith("U") for k in STAGED_COLUMNS)
+    assert {k: rows[k][0] for k in sources} == sources
+    assert all(rows[k][1].rstrip().endswith("U") for k in sources)
+    model = _model_fields(apps.get_model("billing", "LedgerEntry"))
+    assert {k: model[k].related_model.__name__ for k in sources} == {
+        k: v[2:] for k, v in sources.items()
+    }
 
 
 def test_D1_entry_types_are_the_design_minus_the_staged_types(design):
