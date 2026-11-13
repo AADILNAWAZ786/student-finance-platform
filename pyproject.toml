@@ -1,0 +1,24 @@
+[project]
+name = "student-finance"
+version = "0.1.0"
+description = "YottaFlex challenge: tuition, scholarships, payments and balance reconciliation (Django + DRF + SQLite)"
+requires-python = ">=3.12,<3.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "output"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "core", "students", "academics", "billing", "scholarships",
+                     "payments", "reconciliation", "datagen"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/migrations/*" = ["E501"]
+
+[tool.coverage.run]
+source = ["core", "config"]
+omit = ["*/migrations/*"]

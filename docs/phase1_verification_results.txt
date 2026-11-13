@@ -1,0 +1,877 @@
+PHASE 1 API VERIFICATION: PER-CASE RESULTS
+Generated 2026-11-13 from actual runs against the implemented project.
+
+PART A: AUTOMATED TESTS (pytest, isolated file-based test databases)
+Command: .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services tests/api tests/commands tests/verification -v -rxX
+
+tests/core/test_ids.py::test_next_id_is_sequential_per_scope PASSED
+tests/core/test_ids.py::test_reserve_block_for_bulk_generation PASSED
+tests/core/test_ids.py::test_rollback_releases_the_counter PASSED
+tests/core/test_ids.py::test_overflow_does_not_consume_a_counter PASSED
+tests/core/test_ids.py::test_missing_scope_and_unknown_kind PASSED
+tests/core/test_permissions.py::test_role_membership_decides PASSED
+tests/config/test_health_and_docs.py::test_health_ok_without_authentication PASSED
+tests/config/test_health_and_docs.py::test_health_reports_degraded_with_503 PASSED
+tests/config/test_health_and_docs.py::test_probe_turns_database_errors_into_error_status PASSED
+tests/config/test_health_and_docs.py::test_health_rejects_writes_with_envelope PASSED
+tests/config/test_health_and_docs.py::test_openapi_schema_lists_health PASSED
+tests/config/test_health_and_docs.py::test_docs_pages_render[/api/docs/] PASSED
+tests/config/test_health_and_docs.py::test_docs_pages_render[/api/redoc/] PASSED
+tests/config/test_health_and_docs.py::test_schema_generation_has_no_warnings PASSED
+tests/config/test_health_and_docs.py::test_no_missing_migrations PASSED
+tests/config/test_health_and_docs.py::test_health_docs_show_both_databases_and_503 PASSED
+tests/config/test_health_and_docs.py::test_phase1_endpoints_are_documented PASSED
+tests/config/test_router.py::test_migrated_test_databases_are_isolated PASSED
+tests/config/test_sqlite_settings.py::test_default_db_pragmas_from_init_command PASSED
+tests/models/test_models_academics.py::test_program_valid_row_saves PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw0] PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw1] PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw2] PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw3] PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw4] PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw5] PASSED
+tests/models/test_models_academics.py::test_program_check_constraints[kw6] PASSED
+tests/models/test_models_academics.py::test_program_code_unique PASSED
+tests/models/test_models_academics.py::test_program_id_format_validated_by_full_clean PASSED
+tests/models/test_models_academics.py::test_term_valid_row_saves_with_default_grace PASSED
+tests/models/test_models_academics.py::test_term_check_constraints[kw0] PASSED
+tests/models/test_models_academics.py::test_term_check_constraints[kw1] PASSED
+tests/models/test_models_academics.py::test_term_check_constraints[kw2] PASSED
+tests/models/test_models_academics.py::test_term_check_constraints[kw3] PASSED
+tests/models/test_models_academics.py::test_term_year_season_unique PASSED
+tests/models/test_models_academics.py::test_enrollment_relationships PASSED
+tests/models/test_models_academics.py::test_enrollment_unique_student_term PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw0] PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw1] PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw2] PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw3] PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw4] PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw5] PASSED
+tests/models/test_models_academics.py::test_enrollment_check_constraints[kw6] PASSED
+tests/models/test_models_academics.py::test_enrollment_terminal_states_with_their_dates_are_valid PASSED
+tests/models/test_models_academics.py::test_protect_prevents_deleting_referenced_rows PASSED
+tests/models/test_models_students.py::test_valid_row_and_relationships PASSED
+tests/models/test_models_students.py::test_decimal_boundaries_round_trip_exactly[0.00] PASSED
+tests/models/test_models_students.py::test_decimal_boundaries_round_trip_exactly[4.00] PASSED
+tests/models/test_models_students.py::test_decimal_boundaries_round_trip_exactly[2.67] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw0] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw1] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw2] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw3] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw4] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw5] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw6] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw7] PASSED
+tests/models/test_models_students.py::test_check_constraints[kw8] PASSED
+tests/models/test_models_students.py::test_email_unique PASSED
+tests/models/test_models_students.py::test_id_format_and_decimal_places_validated_by_full_clean PASSED
+tests/models/test_models_students.py::test_protect_on_program_term_and_events PASSED
+tests/models/test_models_students.py::test_status_event_id_format_validated PASSED
+tests/services/test_services_academics.py::test_program_ids_sequential_and_rules PASSED
+tests/services/test_services_academics.py::test_term_id_derived_and_census_rule PASSED
+tests/services/test_services_academics.py::test_duplicate_term_rejected PASSED
+tests/services/test_services_academics.py::test_enroll_creates_enrollment_and_event PASSED
+tests/services/test_services_academics.py::test_all_three_billable_terms PASSED
+tests/services/test_services_academics.py::test_non_billable_term_422 PASSED
+tests/services/test_services_academics.py::test_credits_within_program_range[11-False] PASSED
+tests/services/test_services_academics.py::test_credits_within_program_range[12-True] PASSED
+tests/services/test_services_academics.py::test_credits_within_program_range[20-True] PASSED
+tests/services/test_services_academics.py::test_credits_within_program_range[21-False] PASSED
+tests/services/test_services_academics.py::test_duplicate_enrollment_409 PASSED
+tests/services/test_services_academics.py::test_add_drop_window[enrolled_on0-True] PASSED
+tests/services/test_services_academics.py::test_add_drop_window[enrolled_on1-False] PASSED
+tests/services/test_services_academics.py::test_cannot_enroll_before_admit_term PASSED
+tests/services/test_services_academics.py::test_inactive_program_cannot_enroll PASSED
+tests/services/test_services_academics.py::test_complete_only_after_term_end PASSED
+tests/services/test_services_academics.py::test_transition_table_matches_design PASSED
+tests/services/test_services_students.py::test_create_assigns_sequential_ids_and_first_event PASSED
+tests/services/test_services_students.py::test_email_domain_case_normalised_and_unique PASSED
+tests/services/test_services_students.py::test_email_must_use_synthetic_domain PASSED
+tests/services/test_services_students.py::test_age_16_to_60_on_admit_term_start[dob0-True] PASSED
+tests/services/test_services_students.py::test_age_16_to_60_on_admit_term_start[dob1-False] PASSED
+tests/services/test_services_students.py::test_age_16_to_60_on_admit_term_start[dob2-False] PASSED
+tests/services/test_services_students.py::test_age_16_to_60_on_admit_term_start[dob3-True] PASSED
+tests/services/test_services_students.py::test_age_on_leap_day PASSED
+tests/services/test_services_students.py::test_inactive_program_rejected PASSED
+tests/services/test_services_students.py::test_failed_create_leaves_nothing_behind PASSED
+tests/services/test_services_students.py::test_update_contact_only PASSED
+tests/services/test_services_students.py::test_update_contact_email_clash PASSED
+tests/services/test_services_students.py::test_allowed_status_paths_write_one_event_each[path0] PASSED
+tests/services/test_services_students.py::test_allowed_status_paths_write_one_event_each[path1] PASSED
+tests/services/test_services_students.py::test_allowed_status_paths_write_one_event_each[path2] PASSED
+tests/services/test_services_students.py::test_allowed_status_paths_write_one_event_each[path3] PASSED
+tests/services/test_services_students.py::test_allowed_status_paths_write_one_event_each[path4] PASSED
+tests/services/test_services_students.py::test_illegal_transitions_raise_409_and_write_nothing[setup0-ACTIVE] PASSED
+tests/services/test_services_students.py::test_illegal_transitions_raise_409_and_write_nothing[setup1-ACTIVE] PASSED
+tests/services/test_services_students.py::test_illegal_transitions_raise_409_and_write_nothing[setup2-ON_HOLD] PASSED
+tests/services/test_services_students.py::test_illegal_transitions_raise_409_and_write_nothing[setup3-GRADUATED] PASSED
+tests/services/test_services_students.py::test_illegal_transitions_raise_409_and_write_nothing[setup4-WITHDRAWN] PASSED
+tests/services/test_services_students.py::test_event_date_cannot_go_backwards PASSED
+tests/services/test_services_students.py::test_transition_table_matches_design PASSED
+tests/api/test_admin_pages.py::test_changelists_and_change_pages_load PASSED
+tests/api/test_admin_pages.py::test_add_and_delete_disabled[Student] PASSED
+tests/api/test_admin_pages.py::test_add_and_delete_disabled[Program] PASSED
+tests/api/test_admin_pages.py::test_add_and_delete_disabled[Term] PASSED
+tests/api/test_admin_pages.py::test_add_and_delete_disabled[Enrollment] PASSED
+tests/api/test_admin_pages.py::test_rule_driving_fields_are_read_only PASSED
+tests/api/test_api_academics.py::test_program_create_list_filter PASSED
+tests/api/test_api_academics.py::test_program_validation_400[change0-max_credits] PASSED
+tests/api/test_api_academics.py::test_program_validation_400[change1-max_credits] PASSED
+tests/api/test_api_academics.py::test_program_validation_400[change2-level] PASSED
+tests/api/test_api_academics.py::test_program_validation_400[change3-program_id] PASSED
+tests/api/test_api_academics.py::test_program_duplicate_code_400_and_write_roles PASSED
+tests/api/test_api_academics.py::test_term_list_filter_and_create PASSED
+tests/api/test_api_academics.py::test_term_validation_400[change0-census_date] PASSED
+tests/api/test_api_academics.py::test_term_validation_400[change1-due_date] PASSED
+tests/api/test_api_academics.py::test_term_validation_400[change2-season] PASSED
+tests/api/test_api_academics.py::test_term_validation_400[change3-year] PASSED
+tests/api/test_api_academics.py::test_duplicate_term_400 PASSED
+tests/api/test_api_academics.py::test_enroll_201_and_events PASSED
+tests/api/test_api_academics.py::test_enroll_errors PASSED
+tests/api/test_api_academics.py::test_enrollment_filters_and_roles PASSED
+tests/api/test_api_db_isolation.py::test_no_query_reaches_any_non_default_database PASSED
+tests/api/test_api_students.py::test_create_returns_201_with_documented_shape PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[gpa-3.72-string] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[gpa-4.01-less than or equal] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[gpa-3.725-digits] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[need_index-1.50-less than or equal] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[residency-RESIDENT-valid choice] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[program-PRG-999-does not exist] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[email-not-an-email-valid email] PASSED
+tests/api/test_api_students.py::test_create_field_validation_400[date_of_birth-14-03-2006-format] PASSED
+tests/api/test_api_students.py::test_create_business_rules_400 PASSED
+tests/api/test_api_students.py::test_create_rejects_unknown_and_server_owned_fields PASSED
+tests/api/test_api_students.py::test_duplicate_email_400 PASSED
+tests/api/test_api_students.py::test_retrieve_and_404_envelope PASSED
+tests/api/test_api_students.py::test_patch_contact_fields PASSED
+tests/api/test_api_students.py::test_patch_non_contact_or_empty_400[body0] PASSED
+tests/api/test_api_students.py::test_patch_non_contact_or_empty_400[body1] PASSED
+tests/api/test_api_students.py::test_patch_non_contact_or_empty_400[body2] PASSED
+tests/api/test_api_students.py::test_patch_non_contact_or_empty_400[body3] PASSED
+tests/api/test_api_students.py::test_put_and_delete_not_allowed[put] PASSED
+tests/api/test_api_students.py::test_put_and_delete_not_allowed[delete] PASSED
+tests/api/test_api_students.py::test_status_change_and_illegal_transition PASSED
+tests/api/test_api_students.py::test_status_change_validation PASSED
+tests/api/test_api_students.py::test_filters_pagination_and_ordering PASSED
+tests/api/test_api_students.py::test_authentication_and_roles PASSED
+tests/commands/test_seed_commands.py::test_seed_terms_idempotent_and_strict PASSED
+tests/commands/test_seed_commands.py::test_seed_terms_strict_reports_drift PASSED
+tests/commands/test_seed_commands.py::test_seed_roles_groups_and_demo_users_without_passwords PASSED
+tests/verification/test_verify_enrollments.py::test_enroll_valid PASSED
+tests/verification/test_verify_enrollments.py::test_enroll_missing_required[student] PASSED
+tests/verification/test_verify_enrollments.py::test_enroll_missing_required[term] PASSED
+tests/verification/test_verify_enrollments.py::test_enroll_missing_required[credits] PASSED
+tests/verification/test_verify_enrollments.py::test_enrolled_on_defaults_to_today PASSED
+tests/verification/test_verify_enrollments.py::test_default_today_outside_window_rejected PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[12-201-None] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[20-201-None] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[16-201-None] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[11-422-CREDITS_OUT_OF_RANGE] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[21-422-CREDITS_OUT_OF_RANGE] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[24-422-CREDITS_OUT_OF_RANGE] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[1-422-CREDITS_OUT_OF_RANGE] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[0-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[25-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[-3-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[abc-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[16.5-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_enrollments.py::test_credit_limits[None-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-SPRING-2026-02-02-True] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-SPRING-2026-02-03-False] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-SUMMER-2026-06-01-True] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-SUMMER-2026-06-02-False] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-FALL-2026-09-14-True] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-FALL-2026-09-15-False] PASSED
+tests/verification/test_verify_enrollments.py::test_enrollment_date_restriction[TERM-2026-FALL-2026-01-01-True] PASSED
+tests/verification/test_verify_enrollments.py::test_enrolled_on_invalid_format[2026-02-30] PASSED
+tests/verification/test_verify_enrollments.py::test_enrolled_on_invalid_format[20/08/2026] PASSED
+tests/verification/test_verify_enrollments.py::test_enrolled_on_invalid_format[20260820] PASSED
+tests/verification/test_verify_enrollments.py::test_enrolled_on_invalid_format[] PASSED
+tests/verification/test_verify_enrollments.py::test_historical_terms_not_billable_422[TERM-2023-SPRING] PASSED
+tests/verification/test_verify_enrollments.py::test_historical_terms_not_billable_422[TERM-2024-SUMMER] PASSED
+tests/verification/test_verify_enrollments.py::test_historical_terms_not_billable_422[TERM-2025-FALL] PASSED
+tests/verification/test_verify_enrollments.py::test_one_enrollment_per_student_per_term PASSED
+tests/verification/test_verify_enrollments.py::test_invalid_foreign_keys[student-STU-999999] PASSED
+tests/verification/test_verify_enrollments.py::test_invalid_foreign_keys[student-stu-000001] PASSED
+tests/verification/test_verify_enrollments.py::test_invalid_foreign_keys[term-TERM-2030-FALL] PASSED
+tests/verification/test_verify_enrollments.py::test_invalid_foreign_keys[term-TERM-2026-WINTER] PASSED
+tests/verification/test_verify_enrollments.py::test_invalid_foreign_keys[student-None] PASSED
+tests/verification/test_verify_enrollments.py::test_invalid_foreign_keys[term-2026] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[program] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[status] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[enrollment_id] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[withdrawal_date] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[cancellation_date] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[recorded_at] PASSED
+tests/verification/test_verify_enrollments.py::test_server_controlled_fields_rejected[actor] PASSED
+tests/verification/test_verify_enrollments.py::test_cannot_enroll_before_admit_term PASSED
+tests/verification/test_verify_enrollments.py::test_inactive_program_cannot_enroll PASSED
+tests/verification/test_verify_enrollments.py::test_program_is_taken_from_the_student PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params0-expected0] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params1-expected1] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params2-expected2] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params3-expected3] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params4-expected4] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params5-expected5] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params6-expected6] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params7-expected7] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params8-expected8] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params9-expected9] PASSED
+tests/verification/test_verify_enrollments.py::test_list_filters_ordering_pagination[params10-expected10] PASSED
+tests/verification/test_verify_enrollments.py::test_list_errors[params0-400] PASSED
+tests/verification/test_verify_enrollments.py::test_list_errors[params1-400] PASSED
+tests/verification/test_verify_enrollments.py::test_list_errors[params2-404] PASSED
+tests/verification/test_verify_enrollments.py::test_detail_and_events PASSED
+tests/verification/test_verify_enrollments.py::test_completion_after_term_end_writes_event PASSED
+tests/verification/test_verify_enrollments.py::test_completion_on_or_before_end_rejected PASSED
+tests/verification/test_verify_enrollments.py::test_terminal_enrollment_states_reject_completion[COMPLETED] PASSED
+tests/verification/test_verify_enrollments.py::test_terminal_enrollment_states_reject_completion[WITHDRAWN] PASSED
+tests/verification/test_verify_enrollments.py::test_terminal_enrollment_states_reject_completion[CANCELLED] PASSED
+tests/verification/test_verify_health.py::test_both_available_200 PASSED
+tests/verification/test_verify_health.py::test_one_database_unavailable_503[down0-ground_truth] PASSED
+tests/verification/test_verify_health.py::test_one_database_unavailable_503[down1-default] PASSED
+tests/verification/test_verify_health.py::test_both_unavailable_503 PASSED
+tests/verification/test_verify_health.py::test_public_and_ignores_bad_credentials PASSED
+tests/verification/test_verify_health.py::test_live_body_matches_documented_examples PASSED
+tests/verification/test_verify_health.py::test_writes_405[post] PASSED
+tests/verification/test_verify_health.py::test_writes_405[put] PASSED
+tests/verification/test_verify_health.py::test_writes_405[patch] PASSED
+tests/verification/test_verify_health.py::test_writes_405[delete] PASSED
+tests/verification/test_verify_integrity.py::test_student_create_rolls_back_when_event_write_fails PASSED
+tests/verification/test_verify_integrity.py::test_enroll_rolls_back_when_event_write_fails PASSED
+tests/verification/test_verify_integrity.py::test_status_change_rolls_back_when_event_write_fails PASSED
+tests/verification/test_verify_integrity.py::test_api_500_on_unexpected_error_leaves_no_partial_rows PASSED
+tests/verification/test_verify_integrity.py::test_rejected_requests_consume_no_ids PASSED
+tests/verification/test_verify_integrity.py::test_student_constraints_block_raw_updates[change0] PASSED
+tests/verification/test_verify_integrity.py::test_student_constraints_block_raw_updates[change1] PASSED
+tests/verification/test_verify_integrity.py::test_student_constraints_block_raw_updates[change2] PASSED
+tests/verification/test_verify_integrity.py::test_student_constraints_block_raw_updates[change3] PASSED
+tests/verification/test_verify_integrity.py::test_student_constraints_block_raw_updates[change4] PASSED
+tests/verification/test_verify_integrity.py::test_enrollment_constraints_block_raw_updates[change0] PASSED
+tests/verification/test_verify_integrity.py::test_enrollment_constraints_block_raw_updates[change1] PASSED
+tests/verification/test_verify_integrity.py::test_enrollment_constraints_block_raw_updates[change2] PASSED
+tests/verification/test_verify_integrity.py::test_enrollment_constraints_block_raw_updates[change3] PASSED
+tests/verification/test_verify_integrity.py::test_duplicate_primary_keys_rejected PASSED
+tests/verification/test_verify_integrity.py::test_status_events_reference_existing_students_only PASSED
+tests/verification/test_verify_isolation.py::test_no_api_operation_touches_ground_truth PASSED
+tests/verification/test_verify_isolation.py::test_ground_truth_database_holds_no_domain_tables PASSED
+tests/verification/test_verify_isolation.py::test_router_sends_every_phase1_model_to_default PASSED
+tests/verification/test_verify_programs_terms.py::test_program_create_valid PASSED
+tests/verification/test_verify_programs_terms.py::test_program_is_active_defaults_true PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[code] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[name] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[level] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[department] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[is_stem] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[has_lab] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[min_credits] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_missing_required[max_credits] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[6-6-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[6-24-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[12-12-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[24-24-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[5-20-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[12-25-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[21-20-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[0-6-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[-1-6-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[6-32768-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[abc-20-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[12.5-20-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_credit_boundaries[None-20-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[level-PHD] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[level-ug] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[level-] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[is_stem-maybe] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[is_stem-None] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[code-] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[code-CCCCCCCCCCCCC] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[name-value7] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[department-] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[department-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_invalid_enum_and_formats[is_active-sometimes] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_max_lengths_accepted[code-CCCCCCCCCCCC] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_max_lengths_accepted[name-value1] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_max_lengths_accepted[department-DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_server_controlled_or_unknown_fields[program_id] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_server_controlled_or_unknown_fields[recorded_at] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_server_controlled_or_unknown_fields[foo] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_duplicate_code PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params0-expected0] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params1-expected1] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params2-expected2] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params3-expected3] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params4-expected4] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params5-expected5] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params6-expected6] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params7-expected7] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_filters_ordering_pagination[params8-expected8] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_errors[params0] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_list_errors[params1] PASSED
+tests/verification/test_verify_programs_terms.py::test_program_detail_and_404 PASSED
+tests/verification/test_verify_programs_terms.py::test_term_create_valid_derives_id_and_default_grace PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[year] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[season] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[is_billable] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[invoice_date] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[due_date] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[start_date] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[census_date] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_missing_required[end_date] PASSED
+tests/verification/test_verify_programs_terms.py::test_census_must_be_start_plus_28[28-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_census_must_be_start_plus_28[27-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_census_must_be_start_plus_28[29-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change0-None-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change1-due_date-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change2-census_date-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change3-census_date-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change4-None-True] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change5-late_fee_grace_days-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_date_ordering[change6-late_fee_grace_days-False] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[season-WINTER] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[season-fall] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[year-1999] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[year-3000] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[year-x] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[start_date-2027-02-30] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[start_date-25-01-2027] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_invalid_enum_and_formats[is_billable-perhaps] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_server_controlled_or_unknown_fields[term_id] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_server_controlled_or_unknown_fields[recorded_at] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_server_controlled_or_unknown_fields[foo] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_duplicate PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_filters[params0-expected0] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_filters[params1-expected1] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_filters[params2-expected2] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_filters[params3-expected3] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_filters[params4-expected4] PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_default_order_and_count PASSED
+tests/verification/test_verify_programs_terms.py::test_term_list_invalid_filter PASSED
+tests/verification/test_verify_programs_terms.py::test_term_detail_billable_and_historical PASSED
+tests/verification/test_verify_routes.py::test_route_table_matches_resolver PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[health-POST] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[health-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[health-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[health-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[students-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[students-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[students-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-POST] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-status-GET] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-status-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-status-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[student-status-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[programs-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[programs-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[programs-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[program-POST] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[program-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[program-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[program-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[terms-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[terms-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[terms-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[term-POST] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[term-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[term-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[term-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollments-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollments-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollments-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-POST] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-events-POST] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-events-PUT] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-events-PATCH] PASSED
+tests/verification/test_verify_routes.py::test_unsupported_method_returns_405_envelope[enrollment-events-DELETE] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[health] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[students] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[student] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[student-status] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[programs] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[program] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[terms] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[term] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[enrollments] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[enrollment] PASSED
+tests/verification/test_verify_routes.py::test_allowed_methods_are_not_405_and_options_works[enrollment-events] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v1/students/stu-000001/] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v1/students/STU_000001/] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v1/programs/prg-001/] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v1/terms/term-2026-fall/] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v1/enrollments/ENR 2026/] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v1/does-not-exist/] PASSED
+tests/verification/test_verify_routes.py::test_unknown_or_malformed_api_urls_return_404_envelope[/api/v2/students/] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.list-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.retrieve-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.create-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.patch-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[students.status-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.list-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.retrieve-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[programs.create-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.list-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.retrieve-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[terms.create-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.list-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.retrieve-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.events-superuser] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-platform_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-academic_admin] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-support_staff] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-instructor] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-learner] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-no_role] PASSED
+tests/verification/test_verify_security.py::test_role_matrix[enrollments.create-superuser] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[students.list] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[students.retrieve] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[students.create] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[students.patch] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[students.status] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[programs.list] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[programs.retrieve] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[programs.create] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[terms.list] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[terms.retrieve] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[terms.create] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[enrollments.list] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[enrollments.retrieve] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[enrollments.events] PASSED
+tests/verification/test_verify_security.py::test_unauthenticated_401[enrollments.create] PASSED
+tests/verification/test_verify_security.py::test_invalid_credentials_401[Token 0000000000000000000000000000000000000000-AUTHENTICATION_FAILED] PASSED
+tests/verification/test_verify_security.py::test_invalid_credentials_401[Token-AUTHENTICATION_FAILED] PASSED
+tests/verification/test_verify_security.py::test_invalid_credentials_401[Token a b-AUTHENTICATION_FAILED] PASSED
+tests/verification/test_verify_security.py::test_invalid_credentials_401[token 0000000000000000000000000000000000000000-AUTHENTICATION_FAILED] PASSED
+tests/verification/test_verify_security.py::test_invalid_credentials_401[Bearer 0000000000000000000000000000000000000000-NOT_AUTHENTICATED] PASSED
+tests/verification/test_verify_security.py::test_invalid_credentials_401[Basic dXNlcjpwYXNz-NOT_AUTHENTICATED] PASSED
+tests/verification/test_verify_security.py::test_valid_token_authenticates PASSED
+tests/verification/test_verify_security.py::test_inactive_user_token_rejected PASSED
+tests/verification/test_verify_security.py::test_deleted_token_stops_working PASSED
+tests/verification/test_verify_security.py::test_session_auth_requires_csrf_for_writes PASSED
+tests/verification/test_verify_security.py::test_tokens_never_appear_in_responses PASSED
+tests/verification/test_verify_security.py::test_actor_comes_from_authenticated_user_not_payload PASSED
+tests/verification/test_verify_security.py::test_current_behaviour_learner_and_instructor_have_no_record_access PASSED
+tests/verification/test_verify_security.py::test_design_learner_reads_own_record XFAIL
+tests/verification/test_verify_security.py::test_design_instructor_reads_enrollments_of_own_program XFAIL
+tests/verification/test_verify_students.py::test_create_valid PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[first_name] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[last_name] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[email] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[date_of_birth] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[residency] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[program] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[admit_term] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[gpa] PASSED
+tests/verification/test_verify_students.py::test_create_missing_required_field[need_index] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[gpa-3.72] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[gpa-4] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[need_index-0.35] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[gpa-abc] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[gpa-NaN] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[gpa-Infinity] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[gpa-None] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[date_of_birth-14/03/2006] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[date_of_birth-2006-02-30] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[date_of_birth-20060314] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[email-asha] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[email-asha@] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[first_name-] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[first_name-   ] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[first_name-None] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[first_name-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[last_name-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[email-value17] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[program-None] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[admit_term-value19] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_types_and_formats[residency-None] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_residency_enum[domestic] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_residency_enum[RESIDENT] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_residency_enum[] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_residency_enum[1] PASSED
+tests/verification/test_verify_students.py::test_create_rejects_unknown_and_server_controlled_fields[student_id] PASSED
+tests/verification/test_verify_students.py::test_create_rejects_unknown_and_server_controlled_fields[status] PASSED
+tests/verification/test_verify_students.py::test_create_rejects_unknown_and_server_controlled_fields[recorded_at] PASSED
+tests/verification/test_verify_students.py::test_create_rejects_unknown_and_server_controlled_fields[actor] PASSED
+tests/verification/test_verify_students.py::test_create_rejects_unknown_and_server_controlled_fields[foo] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_foreign_keys[program-PRG-999] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_foreign_keys[program-prg-001] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_foreign_keys[program-nonsense] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_foreign_keys[admit_term-TERM-2030-FALL] PASSED
+tests/verification/test_verify_students.py::test_create_invalid_foreign_keys[admit_term-TERM-2026-WINTER] PASSED
+tests/verification/test_verify_students.py::test_create_malformed_bodies[{not json-application/json-400-PARSE_ERROR] PASSED
+tests/verification/test_verify_students.py::test_create_malformed_bodies[[1, 2]-application/json-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_students.py::test_create_malformed_bodies[null-application/json-400-VALIDATION_ERROR] PASSED
+tests/verification/test_verify_students.py::test_create_malformed_bodies[first_name=A-application/x-www-form-urlencoded-415-UNSUPPORTED_MEDIA_TYPE] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[0.00-0.00-True-out0] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[4.00-1.00-True-out1] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[4-1-True-out2] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[3.7-0.5-True-out3] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[-0.00--0.00-True-out4] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[4.01-0.5-False-None] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[-0.01-0.5-False-None] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[3.00-1.01-False-None] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[3.00--0.01-False-None] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[3.725-0.5-False-None] PASSED
+tests/verification/test_verify_students.py::test_gpa_and_need_index_ranges[3.00-0.555-False-None] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[2010-01-26-TERM-2026-SPRING-True] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[2010-01-27-TERM-2026-SPRING-False] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[1965-01-27-TERM-2026-SPRING-True] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[1965-01-26-TERM-2026-SPRING-False] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[2008-09-09-TERM-2024-FALL-True] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[2008-09-10-TERM-2024-FALL-False] PASSED
+tests/verification/test_verify_students.py::test_age_16_to_60_on_admit_term_start[2030-01-01-TERM-2026-SPRING-False] PASSED
+tests/verification/test_verify_students.py::test_reserved_email_domain[asha@example.edu-True-asha@example.edu] PASSED
+tests/verification/test_verify_students.py::test_reserved_email_domain[Asha.Rao@EXAMPLE.EDU-True-Asha.Rao@example.edu] PASSED
+tests/verification/test_verify_students.py::test_reserved_email_domain[asha@gmail.com-False-None] PASSED
+tests/verification/test_verify_students.py::test_reserved_email_domain[asha@example.com-False-None] PASSED
+tests/verification/test_verify_students.py::test_reserved_email_domain[asha@mail.example.edu-False-None] PASSED
+tests/verification/test_verify_students.py::test_reserved_email_domain[asha@example.edu.evil.com-False-None] PASSED
+tests/verification/test_verify_students.py::test_email_uniqueness_is_case_insensitive[asha@example.edu] PASSED
+tests/verification/test_verify_students.py::test_email_uniqueness_is_case_insensitive[ASHA@example.edu] PASSED
+tests/verification/test_verify_students.py::test_email_uniqueness_is_case_insensitive[asha@EXAMPLE.edu] PASSED
+tests/verification/test_verify_students.py::test_email_uniqueness_is_case_insensitive[Asha@Example.Edu] PASSED
+tests/verification/test_verify_students.py::test_inactive_program_rejected PASSED
+tests/verification/test_verify_students.py::test_historical_admit_term_accepted PASSED
+tests/verification/test_verify_students.py::test_ids_are_sequential_and_server_assigned PASSED
+tests/verification/test_verify_students.py::test_list_valid_and_schema PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params0-expected0] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params1-expected1] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params2-expected2] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params3-expected3] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params4-expected4] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params5-expected5] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params6-expected6] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params7-expected7] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params8-expected8] PASSED
+tests/verification/test_verify_students.py::test_list_filters_and_ordering[params9-expected9] PASSED
+tests/verification/test_verify_students.py::test_list_invalid_filter_value_400[params0-status] PASSED
+tests/verification/test_verify_students.py::test_list_invalid_filter_value_400[params1-residency] PASSED
+tests/verification/test_verify_students.py::test_pagination PASSED
+tests/verification/test_verify_students.py::test_page_size_maximum_is_500 PASSED
+tests/verification/test_verify_students.py::test_missing_trailing_slash_redirects PASSED
+tests/verification/test_verify_students.py::test_detail_valid_and_404 PASSED
+tests/verification/test_verify_students.py::test_patch_contact_fields[change0-expected0] PASSED
+tests/verification/test_verify_students.py::test_patch_contact_fields[change1-expected1] PASSED
+tests/verification/test_verify_students.py::test_patch_contact_fields[change2-expected2] PASSED
+tests/verification/test_verify_students.py::test_patch_contact_fields[change3-expected3] PASSED
+tests/verification/test_verify_students.py::test_patch_own_email_unchanged_is_allowed PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[gpa] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[need_index] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[status] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[program] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[admit_term] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[residency] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[date_of_birth] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[student_id] PASSED
+tests/verification/test_verify_students.py::test_patch_protected_fields_rejected[recorded_at] PASSED
+tests/verification/test_verify_students.py::test_patch_invalid[change0] PASSED
+tests/verification/test_verify_students.py::test_patch_invalid[change1] PASSED
+tests/verification/test_verify_students.py::test_patch_invalid[change2] PASSED
+tests/verification/test_verify_students.py::test_patch_invalid[change3] PASSED
+tests/verification/test_verify_students.py::test_patch_invalid[change4] PASSED
+tests/verification/test_verify_students.py::test_patch_duplicate_email_case_insensitive PASSED
+tests/verification/test_verify_students.py::test_patch_nonexistent_404 PASSED
+tests/verification/test_verify_students.py::test_every_allowed_transition_writes_one_event[ACTIVE-ON_HOLD] PASSED
+tests/verification/test_verify_students.py::test_every_allowed_transition_writes_one_event[ON_HOLD-ACTIVE] PASSED
+tests/verification/test_verify_students.py::test_every_allowed_transition_writes_one_event[ACTIVE-WITHDRAWN] PASSED
+tests/verification/test_verify_students.py::test_every_allowed_transition_writes_one_event[ACTIVE-GRADUATED] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[ACTIVE-ACTIVE] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[ON_HOLD-ON_HOLD] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[ON_HOLD-WITHDRAWN] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[ON_HOLD-GRADUATED] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[WITHDRAWN-ACTIVE] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[WITHDRAWN-ON_HOLD] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[WITHDRAWN-WITHDRAWN] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[WITHDRAWN-GRADUATED] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[GRADUATED-ACTIVE] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[GRADUATED-ON_HOLD] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[GRADUATED-WITHDRAWN] PASSED
+tests/verification/test_verify_students.py::test_every_illegal_transition_rejected_409[GRADUATED-GRADUATED] PASSED
+tests/verification/test_verify_students.py::test_full_history_is_append_only_and_ordered PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload0-to_status] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload1-to_status] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload2-to_status] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload3-reason] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload4-reason] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload5-event_date] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload6-event_date] PASSED
+tests/verification/test_verify_students.py::test_status_validation_400[payload7-actor] PASSED
+tests/verification/test_verify_students.py::test_status_same_day_as_previous_event_allowed_and_default_date PASSED
+tests/verification/test_verify_students.py::test_status_actor_is_the_authenticated_user PASSED
+tests/verification/test_verify_students.py::test_status_nonexistent_student_404 PASSED
+tests/config/test_sqlite_settings.py::test_atomic_takes_the_write_lock_at_begin PASSED
+tests/verification/test_verify_integrity.py::test_same_requests_give_identical_results PASSED
+tests/core/test_exceptions.py::test_registry_has_the_18_documented_codes PASSED
+tests/core/test_exceptions.py::test_domain_error_picks_subclass_and_status PASSED
+tests/core/test_exceptions.py::test_unregistered_code_is_a_programming_error PASSED
+tests/core/test_exceptions.py::test_domain_error_rendered_as_envelope_409 PASSED
+tests/core/test_exceptions.py::test_domain_error_rendered_as_envelope_422 PASSED
+tests/core/test_exceptions.py::test_validation_error_400_envelope PASSED
+tests/core/test_exceptions.py::test_django_404_becomes_envelope PASSED
+tests/core/test_exceptions.py::test_unauthenticated_401_envelope_keeps_header PASSED
+tests/core/test_exceptions.py::test_unexpected_exceptions_are_not_swallowed PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[STU-000001-STU-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[PRG-004-PRG-004] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[TERM-2026-FALL-TERM-2026-FALL] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[FEE-PRG-004-2026-FALL-TUITION-DOM-V1-FEE-PRG-004-2026-FALL-TUITION-DOM-V1] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[ENR-2026-000001-ENR-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[INV-STU-000001-2026-000001-INV-STU-000001-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[INV-STU-000001-2026-000001-L03-INV-STU-000001-2026-000001-L03] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[SCT-007-SCT-007] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[SCT-004-PRG-004-SCT-004-PRG-004] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[ELG-2026-000001-ELG-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[SCH-2026-000001-SCH-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[SCHA-SCH-2026-000001-01-SCHA-SCH-2026-000001-01] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[PAY-2026-000001-PAY-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[ALLOC-PAY-2026-000001-01-ALLOC-PAY-2026-000001-01] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[REF-2026-000001-REF-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[LED-2026-0000001-LED-2026-0000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[EVT-INV-2026-0000001-EVT-INV-2026-0000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[SNAP-2026-000001-SNAP-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[RECON-2026-000001-RECON-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[FND-2026-000001-FND-2026-000001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[GEN-2026-0001-GEN-2026-0001] PASSED
+tests/core/test_ids.py::test_formats_match_design_examples[GT-2026-000001-GT-2026-000001] PASSED
+tests/core/test_ids.py::test_brief_id_conventions PASSED
+tests/core/test_ids.py::test_every_kind_has_pattern_and_length_and_examples_fit PASSED
+tests/core/test_ids.py::test_validation[student-STU-000001-True] PASSED
+tests/core/test_ids.py::test_validation[student-STU-00001-False] PASSED
+tests/core/test_ids.py::test_validation[student-STU-000001\n-False] PASSED
+tests/core/test_ids.py::test_validation[student-stu-000001-False] PASSED
+tests/core/test_ids.py::test_validation[term-TERM-2026-WINTER-False] PASSED
+tests/core/test_ids.py::test_validation[invoice-INV-STU-STU-000001-2026-000001-False] PASSED
+tests/core/test_ids.py::test_validation[payment_allocation-ALLOC-PAY-2026-000001-1-False] PASSED
+tests/core/test_ids.py::test_validation[ledger_entry-LED-2026-000001-False] PASSED
+tests/core/test_ids.py::test_validation[fee_schedule-FEE-PRG-004-2026-FALL-PARKING-DOM-V1-False] PASSED
+tests/core/test_ids.py::test_validator_for_models PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>0] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>1] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>2] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>3] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>4] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>5] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>6] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>7] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>8] PASSED
+tests/core/test_ids.py::test_out_of_range_or_malformed_components_raise[<lambda>9] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[0.025-0.03] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[0.024-0.02] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[-0.025--0.03] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[1.005-1.01] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[2.675-2.68] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[-0.001-0.00] PASSED
+tests/core/test_money.py::test_round_money_is_half_up[5-5.00] PASSED
+tests/core/test_money.py::test_negative_zero_is_normalised PASSED
+tests/core/test_money.py::test_floats_and_non_numbers_are_refused[0.1] PASSED
+tests/core/test_money.py::test_floats_and_non_numbers_are_refused[1.0] PASSED
+tests/core/test_money.py::test_floats_and_non_numbers_are_refused[True] PASSED
+tests/core/test_money.py::test_floats_and_non_numbers_are_refused[None] PASSED
+tests/core/test_money.py::test_floats_and_non_numbers_are_refused[bad4] PASSED
+tests/core/test_money.py::test_non_finite_or_garbage_strings_are_refused[abc] PASSED
+tests/core/test_money.py::test_non_finite_or_garbage_strings_are_refused[NaN] PASSED
+tests/core/test_money.py::test_non_finite_or_garbage_strings_are_refused[Infinity] PASSED
+tests/core/test_money.py::test_non_finite_or_garbage_strings_are_refused[] PASSED
+tests/core/test_money.py::test_parse_money_is_strict PASSED
+tests/core/test_money.py::test_dsum_is_exact_where_float_is_not PASSED
+tests/core/test_money.py::test_apply_rate_matches_business_examples PASSED
+tests/core/test_money.py::test_format_money PASSED
+tests/core/test_money.py::test_money_field_input[12500.00-True-expected0] PASSED
+tests/core/test_money.py::test_money_field_input[12500.5-True-expected1] PASSED
+tests/core/test_money.py::test_money_field_input[12500.5-False-None] PASSED
+tests/core/test_money.py::test_money_field_input[12500-False-None] PASSED
+tests/core/test_money.py::test_money_field_input[1.005-False-None] PASSED
+tests/core/test_money.py::test_money_field_input[abc-False-None] PASSED
+tests/core/test_money.py::test_money_field_input[10000000000.00-False-None] PASSED
+tests/core/test_money.py::test_money_field_output_is_string PASSED
+tests/core/test_permissions.py::test_five_actor_roles PASSED
+tests/core/test_permissions.py::test_unknown_or_empty_roles_rejected PASSED
+tests/config/test_router.py::test_ground_truth_label_reads_and_writes_go_to_ground_truth PASSED
+tests/config/test_router.py::test_everything_else_goes_to_default[User] PASSED
+tests/config/test_router.py::test_everything_else_goes_to_default[IdSequence] PASSED
+tests/config/test_router.py::test_everything_else_goes_to_default[model2] PASSED
+tests/config/test_router.py::test_everything_else_goes_to_default[model3] PASSED
+tests/config/test_router.py::test_migrations_allowed_only_on_the_right_side PASSED
+tests/config/test_router.py::test_no_relations_across_databases PASSED
+tests/config/test_sqlite_settings.py::test_both_databases_configured_as_designed PASSED
+tests/config/test_sqlite_settings.py::test_runtime_versions PASSED
+tests/config/test_sqlite_settings.py::test_system_check_passes_with_project_settings PASSED
+tests/config/test_sqlite_settings.py::test_system_check_catches_misconfiguration PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[core] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[students] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[academics] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[billing] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[scholarships] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[payments] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_do_not_import_datagen[reconciliation] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[core] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[students] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[academics] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[billing] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[scholarships] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[payments] PASSED
+tests/architecture/test_ground_truth_isolation.py::test_blind_packages_never_name_ground_truth[reconciliation] PASSED
+tests/services/test_calendar.py::test_2026_matches_frozen_table[SPRING-invoice0-start0-due0-census0-end0] PASSED
+tests/services/test_calendar.py::test_2026_matches_frozen_table[SUMMER-invoice1-start1-due1-census1-end1] PASSED
+tests/services/test_calendar.py::test_2026_matches_frozen_table[FALL-invoice2-start2-due2-census2-end2] PASSED
+tests/services/test_calendar.py::test_late_fee_posting_day_matches_table PASSED
+tests/services/test_calendar.py::test_twelve_terms_nine_historical PASSED
+XFAIL tests/verification/test_verify_security.py::test_design_learner_reads_own_record - BLOCKED (design gap): the frozen data model has no User↔Student link, so 'learner reads own student record' (ARCHITECTURE §13) cannot be implemented without a model change.
+XFAIL tests/verification/test_verify_security.py::test_design_instructor_reads_enrollments_of_own_program - BLOCKED (design gap): the frozen data model has no User↔Program link, so 'instructor reads enrollments for their programs' (ARCHITECTURE §13) cannot be implemented without a model change.
+======================= 797 passed, 2 xfailed in 13.16s ========================
+
+PART B: MANUAL LIVE-SERVER CHECKS (runserver, DEBUG=True, isolated copy with fresh databases)
+Columns: id  verdict  HTTP  error-code  method  path  description
+
+M01 PASS  200 -                        GET    /api/v1/health/                                health both up
+M02 PASS  405 METHOD_NOT_ALLOWED       POST   /api/v1/health/                                health POST
+M03 PASS  201 -                        POST   /api/v1/programs/                              create program
+M04 PASS  400 VALIDATION_ERROR         POST   /api/v1/programs/                              duplicate program code
+M05 PASS  400 VALIDATION_ERROR         POST   /api/v1/programs/                              program credits 5
+M06 PASS  400 VALIDATION_ERROR         POST   /api/v1/programs/                              program_id in body
+M07 PASS  200 -                        GET    /api/v1/programs/                              list programs
+M08 PASS  200 -                        GET    /api/v1/programs/PRG-001/                      get program
+M09 PASS  404 NOT_FOUND                GET    /api/v1/programs/PRG-404/                      program 404
+M10 PASS  404 NOT_FOUND                GET    /api/v1/programs/prg-001/                      program lowercase id
+M11 PASS  405 METHOD_NOT_ALLOWED       PATCH  /api/v1/programs/PRG-001/                      program PATCH
+M12 PASS  200 -                        GET    /api/v1/terms/                                 list terms billable
+M13 PASS  200 -                        GET    /api/v1/terms/TERM-2026-FALL/                  get term
+M14 PASS  201 -                        POST   /api/v1/terms/                                 create term 2027
+M15 PASS  400 VALIDATION_ERROR         POST   /api/v1/terms/                                 term census wrong
+M16 PASS  405 METHOD_NOT_ALLOWED       DELETE /api/v1/terms/TERM-2026-FALL/                  term DELETE
+M17 PASS  201 -                        POST   /api/v1/students/                              create student
+M18 PASS  400 VALIDATION_ERROR         POST   /api/v1/students/                              student email case dup
+M19 PASS  400 VALIDATION_ERROR         POST   /api/v1/students/                              student gpa as number
+M20 PASS  400 VALIDATION_ERROR         POST   /api/v1/students/                              student age 15
+M21 PASS  400 VALIDATION_ERROR         POST   /api/v1/students/                              student gmail
+M22 PASS  201 -                        POST   /api/v1/students/                              student need -0.00
+M23 PASS  400 PARSE_ERROR              POST   /api/v1/students/                              malformed JSON
+M24 PASS  415 UNSUPPORTED_MEDIA_TYPE   POST   /api/v1/students/                              form content type
+M25 PASS  200 -                        GET    /api/v1/students/                              list students filter
+M26 PASS  400 VALIDATION_ERROR         GET    /api/v1/students/                              list students bad filter
+M27 PASS  404 NOT_FOUND                GET    /api/v1/students/                              list students page 99
+M28 PASS  200 -                        GET    /api/v1/students/STU-000001/                   get student
+M29 PASS  404 NOT_FOUND                GET    /api/v1/students/stu-000001/                   student lowercase id
+M30 PASS  200 -                        PATCH  /api/v1/students/STU-000001/                   patch contact
+M31 PASS  400 VALIDATION_ERROR         PATCH  /api/v1/students/STU-000001/                   patch gpa
+M32 PASS  405 METHOD_NOT_ALLOWED       PUT    /api/v1/students/STU-000001/                   student PUT
+M33 PASS  405 METHOD_NOT_ALLOWED       DELETE /api/v1/students/STU-000001/                   student DELETE
+M34 PASS  200 -                        POST   /api/v1/students/STU-000001/status/            status ON_HOLD
+M35 PASS  409 ILLEGAL_TRANSITION       POST   /api/v1/students/STU-000001/status/            status ON_HOLD->GRADUATED
+M36 PASS  405 METHOD_NOT_ALLOWED       GET    /api/v1/students/STU-000001/status/            status GET
+M37 PASS  201 -                        POST   /api/v1/enrollments/                           enroll
+M38 PASS  409 ENROLLMENT_EXISTS        POST   /api/v1/enrollments/                           enroll duplicate
+M39 PASS  422 CREDITS_OUT_OF_RANGE     POST   /api/v1/enrollments/                           enroll credits 21
+M40 PASS  422 TERM_NOT_BILLABLE        POST   /api/v1/enrollments/                           enroll historical term
+M41 PASS  400 VALIDATION_ERROR         POST   /api/v1/enrollments/                           enroll after add/drop
+M42 PASS  400 VALIDATION_ERROR         POST   /api/v1/enrollments/                           enroll no date (today)
+M43 PASS  200 -                        GET    /api/v1/enrollments/                           list enrollments
+M44 PASS  200 -                        GET    /api/v1/enrollments/ENR-2026-000001/           get enrollment
+M45 PASS  200 -                        GET    /api/v1/enrollments/ENR-2026-000001/events/    enrollment events
+M46 PASS  405 METHOD_NOT_ALLOWED       POST   /api/v1/enrollments/ENR-2026-000001/events/    events POST
+M47 PASS  404 NOT_FOUND                GET    /api/v1/enrollments/ENR-2026-999999/           enrollment 404
+M48 PASS  404 NOT_FOUND                GET    /api/v1/nothing/                               unknown API path (DEBUG on)
+M49 PASS  301 -                        GET    /api/v1/students                               no trailing slash
+M50 PASS  401 NOT_AUTHENTICATED        GET    /api/v1/students/                              no token
+M51 PASS  401 AUTHENTICATION_FAILED    GET    /api/v1/students/                              invalid token
+M52 PASS  200 -                        GET    /api/v1/students/                              role platform_admin list students
+M53 PASS  200 -                        GET    /api/v1/students/                              role academic_admin list students
+M54 PASS  200 -                        GET    /api/v1/students/                              role support_staff list students
+M55 PASS  403 PERMISSION_DENIED        GET    /api/v1/students/                              role instructor list students
+M56 PASS  403 PERMISSION_DENIED        GET    /api/v1/students/                              role learner list students
+M57 PASS  201 -                        POST   /api/v1/programs/                              role platform_admin create program
+M58 PASS  201 -                        POST   /api/v1/programs/                              role academic_admin create program
+M59 PASS  403 PERMISSION_DENIED        POST   /api/v1/programs/                              role support_staff create program
+M60 PASS  403 PERMISSION_DENIED        POST   /api/v1/programs/                              role instructor create program
+M61 PASS  403 PERMISSION_DENIED        POST   /api/v1/programs/                              role learner create program
+M62 PASS  200 -                        GET    /api/v1/terms/                                 role instructor list terms
+M63 PASS  200 -                        GET    /api/docs/                                     swagger UI
+
+manual checks: 63  passed: 63  failed: 0

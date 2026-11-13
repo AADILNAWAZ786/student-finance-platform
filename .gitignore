@@ -1,0 +1,38 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# SQLite databases (domain + ground truth + test copies)
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+# generated datasets; manifests are committed explicitly when needed
+output/
+.env
+
+# Environment-specific configuration and secrets
+.env.*
+!.env.example
+
+# Additional local databases and backups
+*.db
+*.sqlite
+*.bak
+*.backup
+
+# Private credentials and certificates
+*.pem
+*.key
+secrets/
+credentials/
+
+# Local logs and temporary files
+*.log
+*.tmp
+
+# Local IDE settings
+.vscode/
+.idea/

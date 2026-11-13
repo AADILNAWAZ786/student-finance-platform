@@ -1,0 +1,156 @@
+Phase 2 (billing): verification results
+========================================
+Date: 2026-11-13. Every result below was produced by running the real project.
+Run 1: the working project. Run 2: a merge simulation (a clean copy of the verified Phase 1 +
+B5 master, a copy of a populated Phase 1 database, this delta copied over, then migrated).
+Both runs gave the same results. Frozen docs (ARCHITECTURE.md, DATABASE_DESIGN.md v1.1)
+and all Phase 1 app code and migrations are unchanged.
+
+Environment: Python 3.12, Django 5.2.19, DRF 3.18.3, drf-spectacular 0.30.0, pytest 9.2.0,
+SQLite 3.45.1, ruff 0.17.4 (pinned requirements.txt; no new dependency).
+
+1. Project checks (merge simulation)
+------------------------------------
+manage.py check                                   System check identified no issues (0 silenced).
+manage.py migrate                                 Applying billing.0001_initial... OK
+manage.py migrate --database=ground_truth         Applying billing.0001_initial... OK
+                                                  (recorded only; ground_truth tables after:
+                                                  django_migrations, sqlite_sequence)
+manage.py makemigrations --check --dry-run        No changes detected
+manage.py spectacular --validate --fail-on-warn   exit 0, no warnings
+ruff check .                                      All checks passed!
+ruff format --check .                             141 files already formatted
+
+2. Migration safety on a populated Phase 1 database (merge simulation)
+------------------------------------------------------------------------
+Tables compared before/after migrate: 17 (all non-billing tables, excluding django_migrations)
+Existing rows changed or removed: 0
+Rows added by Django's post_migrate for the new models (standard, not by the migration):
+    django_content_type +5, auth_permission +20
+Billing tables created (empty): billing_feeschedule, billing_invoice, billing_invoiceline,
+    billing_invoiceevent, billing_ledgerentry
+Migration SQL (sqlmigrate billing 0001): 22 statements, all CREATE TABLE / CREATE INDEX on
+    billing_ tables; no ALTER, DROP, INSERT, UPDATE or DELETE (test_verify_billing.py)
+
+3. Test suite: everything implemented (Phases 0, 1, 2, runnable unit tests)
+-----------------------------------------------------------------------------
+pytest tests/core tests/config tests/architecture tests/models tests/services tests/api
+       tests/commands tests/verification tests/workflow
+       tests/unit/test_invoice_status.py tests/unit/test_invoice_lifecycle.py
+       tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py -rxX
+
+    1410 passed, 2 xfailed, 0 failed     (Phase 1 baseline: 862 passed, 2 xfailed)
+
+XFAIL (unchanged, strict): the two blocked design rules (docs/KNOWN_LIMITATIONS.md L1, L2)
+    test_verify_security.py::test_design_learner_reads_own_record
+    test_verify_security.py::test_design_instructor_reads_enrollments_of_own_program
+
+Billing line coverage (measurement only; coverage config unchanged): 99% (1046 statements,
+11 missed: defensive branches such as a concurrent-insert IntegrityError path).
+
+Per file (collected; 1412 = 1410 passed + 2 xfailed):
+    6  tests/api/test_admin_pages.py
+   15  tests/api/test_api_academics.py
+   63  tests/api/test_api_billing.py
+    2  tests/api/test_api_db_isolation.py
+   24  tests/api/test_api_students.py
+   14  tests/architecture/test_ground_truth_isolation.py
+    3  tests/commands/test_seed_commands.py
+   11  tests/config/test_health_and_docs.py
+    8  tests/config/test_router.py
+    6  tests/config/test_sqlite_settings.py
+    9  tests/core/test_exceptions.py
+   49  tests/core/test_ids.py
+   29  tests/core/test_money.py
+    3  tests/core/test_permissions.py
+   16  tests/models/test_billing_schema_contract.py
+   27  tests/models/test_models_academics.py
+   65  tests/models/test_models_billing.py
+   17  tests/models/test_models_students.py
+    5  tests/services/test_calendar.py
+   17  tests/services/test_services_academics.py
+   67  tests/services/test_services_billing.py
+   29  tests/services/test_services_fee_schedules.py
+   24  tests/services/test_services_students.py
+   26  tests/unit/test_billing_calculators.py
+    6  tests/unit/test_fee_schedule_versions.py
+   14  tests/unit/test_invoice_lifecycle.py
+   24  tests/unit/test_invoice_status.py
+    6  tests/verification/test_verify_billing.py
+   70  tests/verification/test_verify_enrollments.py
+   10  tests/verification/test_verify_health.py
+   17  tests/verification/test_verify_integrity.py
+    6  tests/verification/test_verify_isolation.py
+  121  tests/verification/test_verify_openapi_examples.py
+   92  tests/verification/test_verify_programs_terms.py
+  124  tests/verification/test_verify_routes.py
+  240  tests/verification/test_verify_security.py
+  146  tests/verification/test_verify_students.py
+    1  tests/workflow/test_end_to_end.py
+
+Phase 2 acceptance tests from ARCHITECTURE §14 / §16 (unchanged files, now green):
+    tests/unit/test_invoice_status.py       24 passed  (BR-INV-04/05/06, all six statuses)
+    tests/unit/test_invoice_lifecycle.py    14 passed  (BR-INV-08)
+    tests/unit/test_fee_schedule_versions.py 6 passed  (BR-FEE-01/03)
+§16 workflow steps 1–3b: tests/workflow/test_end_to_end.py, 1 passed (all through the API)
+
+4. Later-phase acceptance tests (excluded from the passing suite; reported separately)
+-----------------------------------------------------------------------------------------
+pytest --collect-only -q tests/unit/test_full_ride_scholarship.py tests/unit/test_payment_allocation.py
+       tests/unit/test_withdrawal_refund_pct.py tests/unit/test_withdrawal_release.py
+       tests/unit/test_worked_example.py tests/unit/test_stage_rng.py
+    6 errors during collection (exit code 2). Confirmed against the actual files:
+
+    test_full_ride_scholarship.py  ModuleNotFoundError: No module named 'scholarships.calculators'  (Phase 3)
+    test_payment_allocation.py     ModuleNotFoundError: No module named 'payments.calculators'      (Phase 4)
+    test_withdrawal_refund_pct.py  ModuleNotFoundError: No module named 'academics.calculators'     (Phase 5)
+    test_withdrawal_release.py     ImportError: cannot import name 'release_for_adjustment' from
+                                   'billing.calculators'  (changed from ModuleNotFoundError; Phase 5, D12)
+    test_worked_example.py         ModuleNotFoundError: No module named 'academics.calculators'
+                                   (its first failing import is line 13, before billing; Phases 3–6)
+    test_stage_rng.py              ModuleNotFoundError: No module named 'datagen.rng'               (Phase 7)
+
+Before Phase 2: 9 collection errors. A bare "pytest" over all of tests/ is still interrupted at
+collection by these 6; that is expected until their phases exist.
+
+5. What the Phase 2 tests verify (summary)
+-------------------------------------------
+Models (65 + 16 contract): every CHECK, unique and PROTECT rule on the five tables; no DB unique
+    on invoice→enrollment (duplicate must be representable); staged LedgerEntry = the
+    DATABASE_DESIGN.md table minus exactly scholarship_allocation (Phase 3), payment and
+    refund (Phase 4), and their 4 entry types; the other four tables match the design
+    exactly (columns, lengths, decimal precision, FK targets, enums), read from the frozen doc.
+Calculators (26 + 44 acceptance): price_lines frozen 2-argument signature (D4); apply_waivers
+    (BR-WAV-01); late fee at the grace boundary, ₹500/₹5,000 limits, half-up rounding;
+    ledger_balance (D13, exact Decimal); open amounts; void plan; all six collection statuses.
+Services (29 fee schedules + 67 billing): D3 residency mapping, D5 flags, version chain rules,
+    D2 required fee types (each missing type → 422), BR-FEE-01 version on the invoice date,
+    BR-INV-01 duplicate (409, nothing written, ID counters untouched), regeneration after
+    void, D11 (COMPLETED → 409), waivers, zero-priced invoice, atomic rollback when a ledger
+    post fails mid-way, void (−net adjustments, ledger back to 0, BR-INV-08 current-amount
+    rule incl. fully reversed allocations allowed), D15 dates, late fees (once, dry run,
+    date-independent), refresh (due date boundary, never backwards, VOID skipped), balance
+    and the BR-BAL-02 identity.
+API (63): every endpoint, filters (incl. in_force_on), money as strings only, server-field
+    rejection, 400/404/405/409/422 envelopes, D14 (no fee-schedule detail), POST-only batches,
+    every success response validated against the served OpenAPI schema.
+Verification: routes 23 (11 + 12) × every method; all 112 documented error examples (56
+    Phase 1 + 56 Phase 2) replayed live and equal; role matrix incl. D6 for 13 billing
+    operations; zero queries on ground_truth for every billing call; ground_truth holds no
+    billing table; migration safety; two concurrent generations → exactly one invoice and one
+    409 DUPLICATE_INVOICE (file database, two threads); identical rows (IDs included) when
+    the same scenario runs twice; every invariant reconciliation will re-check (ledger 1:1 and
+    signs, gross/net/waiver arithmetic, invoice total, open ≥ 0, event chains, stored status =
+    BR-INV-06 at collection_status_as_of, BR-BAL-02 per student).
+
+6. Defect found during implementation (fixed before delivery)
+---------------------------------------------------------------
+P2-B1  CHECK "adjustment_reason required on ADJUSTMENT lines" accepted NULL (SQL NULL IN (...)
+       is unknown, which a CHECK accepts). Found by tests/models/test_models_billing.py.
+       Fixed with an explicit IS NOT NULL; migration regenerated.
+
+7. Local data
+--------------
+This workspace's own master databases were never migrated or written: db.sqlite3 and
+ground_truth.sqlite3 have the same SHA-256 before and after all Phase 2 work. Tests use
+test_db.sqlite3 / test_ground_truth.sqlite3; the merge simulation used copies.
