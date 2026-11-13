@@ -1,0 +1,199 @@
+Phase 3 (scholarships): verification results
+=============================================
+Date: 2026-11-13 (revised after review: P3-B1..B3). Every result below was produced by
+running the real project.
+Base: the Phase 2 code as pushed to github.com/AADILNAWAZ786/student-finance-platform (main);
+the repository was compared file by file with the working base before starting (identical
+except .gitignore, which is not part of this delta).
+Frozen docs (ARCHITECTURE.md, DATABASE_DESIGN.md v1.1), every Phase 1/2 migration, and all
+students/, academics/ and core/ code are unchanged.
+
+Environments: Python 3.14.6 (required; CPython via uv, pinned requirements.txt: Django 5.2.19,
+DRF 3.18.3, drf-spectacular 0.30.0, pytest 9.2.0) and Python 3.12.3 (additional).
+SQLite 3.45.1, ruff 0.17.4. No new dependency.
+
+1. Project checks (Python 3.14.6 and 3.12.3, same results)
+-----------------------------------------------------------
+manage.py check                                   System check identified no issues (0 silenced).
+manage.py makemigrations --check --dry-run        No changes detected
+manage.py spectacular --validate --fail-on-warn   exit 0, no warnings
+ruff check . / ruff format --check .              All checks passed! / 167 files already formatted
+
+2. Migrations (additive; existing migration files untouched)
+-------------------------------------------------------------
+scholarships/0001_initial   6 x CreateModel; SQL = CREATE TABLE / CREATE INDEX on scholarships_*
+                            tables only (6 tables)
+billing/0002_ledger_scholarship_sources
+                            AddField(scholarship_allocation) + AlterField(entry_type) +
+                            3 x RemoveConstraint/AddConstraint on billing_ledgerentry only.
+                            SQLite rebuilds that table by copying every row (INSERT ... SELECT);
+                            no UPDATE or DELETE.
+Merge simulation on a POPULATED Phase 2 database copy (Phase 1 data + fee schedules, an
+invoice with a waiver, a posted late fee, 5 ledger entries, OVERDUE status):
+    migrate                         Applying scholarships.0001_initial... OK
+                                    Applying billing.0002_ledger_scholarship_sources... OK
+    migrate --database=ground_truth recorded only; ground_truth tables: django_migrations,
+                                    sqlite_sequence
+    tables compared: 22; existing rows changed or removed: 0
+    ledger rows: new column scholarship_allocation_id = NULL on every existing entry
+    added by Django post_migrate (standard): django_content_type +6, auth_permission +24
+    scholarship tables created empty (the seed command is never run automatically)
+Verification test: migrating back to billing 0001 / scholarships zero and forward again keeps
+every Phase 1/2 row byte-identical.
+On that copy (copy only): seed_scholarship_types created 7 types; a second run changed nothing;
+SCT-004 awarded and applied to the existing invoice: allocated_on defaulted to 2026-10-01 (the
+invoice's latest status date), invoice stayed OVERDUE, balance identity held.
+
+3. Test suite: everything implemented (Phases 0-3 + runnable unit tests)
+--------------------------------------------------------------------------
+pytest tests/core tests/config tests/architecture tests/models tests/services tests/api
+       tests/commands tests/verification tests/workflow
+       tests/unit/test_invoice_status.py tests/unit/test_invoice_lifecycle.py
+       tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py
+       tests/unit/test_full_ride_scholarship.py tests/unit/test_scholarship_calculators.py -rxX
+
+    Python 3.14.6:   1772 passed, 2 xfailed, 0 failed     (Phase 2 baseline on 3.14.6: 1410 passed, 2 xfailed)
+    Python 3.12.3:   1772 passed, 2 xfailed, 0 failed
+    Merged copy (3.14.6): 1772 passed, 2 xfailed, 0 failed
+    (first delivery: 1756; +16 tests for the review corrections, none removed)
+
+XFAIL (unchanged, strict): the two blocked design rules (KNOWN_LIMITATIONS L1, L2)
+    test_verify_security.py::test_design_learner_reads_own_record
+    test_verify_security.py::test_design_instructor_reads_enrollments_of_own_program
+
+Line coverage billing + scholarships (measurement only, config unchanged): 98% (1946 statements).
+
+Per file (collected; 1774 = 1772 passed + 2 xfailed):
+    6  tests/api/test_admin_pages.py
+   15  tests/api/test_api_academics.py
+   63  tests/api/test_api_billing.py
+    3  tests/api/test_api_db_isolation.py
+   38  tests/api/test_api_scholarships.py
+   24  tests/api/test_api_students.py
+   11  tests/architecture/test_app_dependencies.py
+   14  tests/architecture/test_ground_truth_isolation.py
+    3  tests/commands/test_seed_commands.py
+    4  tests/commands/test_seed_scholarship_types.py
+   11  tests/config/test_health_and_docs.py
+    8  tests/config/test_router.py
+    6  tests/config/test_sqlite_settings.py
+    9  tests/core/test_exceptions.py
+   49  tests/core/test_ids.py
+   29  tests/core/test_money.py
+    3  tests/core/test_permissions.py
+   16  tests/models/test_billing_schema_contract.py
+   27  tests/models/test_models_academics.py
+   65  tests/models/test_models_billing.py
+   38  tests/models/test_models_scholarships.py
+   17  tests/models/test_models_students.py
+   14  tests/models/test_scholarship_schema_contract.py
+    5  tests/services/test_calendar.py
+   17  tests/services/test_services_academics.py
+   67  tests/services/test_services_billing.py
+   30  tests/services/test_services_eligibility.py
+   29  tests/services/test_services_fee_schedules.py
+   43  tests/services/test_services_scholarships.py
+   24  tests/services/test_services_students.py
+   26  tests/unit/test_billing_calculators.py
+    6  tests/unit/test_fee_schedule_versions.py
+    6  tests/unit/test_full_ride_scholarship.py
+   14  tests/unit/test_invoice_lifecycle.py
+   24  tests/unit/test_invoice_status.py
+   34  tests/unit/test_scholarship_calculators.py
+    6  tests/verification/test_verify_billing.py
+   70  tests/verification/test_verify_enrollments.py
+   10  tests/verification/test_verify_health.py
+   17  tests/verification/test_verify_integrity.py
+    9  tests/verification/test_verify_isolation.py
+  157  tests/verification/test_verify_openapi_examples.py
+   92  tests/verification/test_verify_programs_terms.py
+  156  tests/verification/test_verify_routes.py
+    7  tests/verification/test_verify_scholarships.py
+  304  tests/verification/test_verify_security.py
+  146  tests/verification/test_verify_students.py
+    2  tests/workflow/test_end_to_end.py
+
+Phase 3 acceptance test (ARCHITECTURE §14/§16), unchanged file, now green:
+    tests/unit/test_full_ride_scholarship.py   6 passed
+§9.3 workflow steps 4-5: tests/workflow/test_end_to_end.py::test_workflow_steps_4_and_5 passed
+    (7 results with reason codes; award capped at eligible fees; over-cap request -> 422)
+
+4. Later-phase acceptance tests (excluded from the passing suite; reported separately)
+-----------------------------------------------------------------------------------------
+pytest --collect-only -q tests/unit/test_payment_allocation.py tests/unit/test_withdrawal_refund_pct.py
+       tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py tests/unit/test_stage_rng.py
+    5 errors during collection (was 6), confirmed against the actual files:
+    test_payment_allocation.py     ModuleNotFoundError: No module named 'payments.calculators'   (Phase 4)
+    test_withdrawal_refund_pct.py  ModuleNotFoundError: No module named 'academics.calculators'  (Phase 5)
+    test_withdrawal_release.py     ImportError: cannot import name 'release_for_adjustment' from
+                                   'billing.calculators'                                         (Phase 5)
+    test_worked_example.py         ModuleNotFoundError: No module named 'academics.calculators'  (first import)
+    test_stage_rng.py              ModuleNotFoundError: No module named 'datagen.rng'            (Phase 7)
+
+5. The four money limits (each proved to bite on its own)
+-----------------------------------------------------------
+1 per-term cap on AWARDS (BR-SCH-03, D-S5)         test_D_S5_per_term_cap_is_cumulative_over_awards_not_allocations
+2 award-stage reservation guardrail (not BR-SCH-04) test_reservation_guardrail_* (422 rule_id null)
+3 BR-SCH-04 on APPLIED allocations, at apply        test_BR_SCH_04_* (award inserted without the
+                                                    guardrail is still refused; exact base allowed)
+4 each line's remaining room incl. adjustments      test_line_room_* (refused although the base allows it)
+BR-ALC-06 hook: a non-zero payment release with no handler raises and rolls everything back
+(test_payment_release_without_handler_fails_loudly_and_rolls_back).
+
+6. Other verification
+----------------------
+Routes 29 (11 + 12 + 6) x every method; all 148 documented error examples (56 + 56 + 36)
+replayed live and equal (INVOICE_HAS_ALLOCATIONS now with a real applied scholarship);
+role matrix incl. 8 scholarship operations (write platform_admin; read platform_admin,
+support_staff; academic_admin / instructor / learner 403); zero ground-truth queries for every
+scholarship call; ground_truth holds no scholarship table; AST dependency graph (§4): billing
+imports neither scholarships nor payments, scholarships never imports payments/reconciliation;
+two concurrent awards in one exclusive group -> one award, one 409; identical rows (IDs
+included) when the same scenario runs twice; invariant sweep (ledger 1:1 and signs,
+allocations <= award, per-term cap, BR-SCH-04, line open >= 0, coverable lines only, event
+chains, stored collection status = recomputed, BR-BAL-02 per student).
+
+7. Changes to existing Phase 1/2 tests (additive or planned; no assertion weakened)
+------------------------------------------------------------------------------------
+test_verify_routes.py            route count 23 -> 29, new routes and malformed URLs
+test_verify_openapi_examples.py  example count 112 -> 148, new recipes; the void recipe uses a
+                                 real scholarship instead of the Phase 2 simulated allocation
+test_verify_security.py          8 scholarship operations added to the matrix
+test_verify_isolation.py, tests/api/test_api_db_isolation.py   new scholarship checks appended
+test_billing_schema_contract.py  staged list: scholarship source/types removed (now built);
+                                 payment/refund (Phase 4) remain staged
+test_models_billing.py           one case relabelled: SCHOLARSHIP_CREDIT is rejected without a
+                                 scholarship-allocation source
+test_api_billing.py              ledger entry dict gained "scholarship_allocation": None
+                                 (additive response field)
+test_end_to_end.py               steps 4-5 appended
+conftest.py (api, models, services, verification)   also expose the scholarship fixtures
+
+8. Review corrections (revised delta)
+--------------------------------------
+P3-B1  ScholarshipType effective_from / effective_to now validated with check_business_date
+       (2026 only; field-level 400; both fields reported together).
+       Tests: test_effective_dates_must_be_2026_business_dates (4 cases),
+       test_both_effective_dates_outside_2026_are_both_reported,
+       test_effective_window_on_the_2026_boundaries_is_accepted,
+       test_type_effective_dates_outside_2026_are_400 (API, 4 cases).
+P3-B2  max_gpa DB CHECK aligned with the approved 0-4 bounds: 0 <= max_gpa <= 4 (model and
+       scholarships/0001_initial; makemigrations --check: no changes).
+       Tests: test_max_gpa_bounds_are_inclusive_0_to_4 (0.00 and 4.00 save),
+       {"max_gpa": -0.01} and {"max_gpa": 4.01} rejected by the DB,
+       test_max_gpa_zero_is_accepted_consistently (service),
+       test_type_max_gpa_zero_is_handled_consistently (API: 201, not a database 500;
+       min 0 with max 0 -> 400; 4.01 -> 400).
+P3-B3  create_scholarship_type's IntegrityError handler mapped every DB error to "Only one
+       ALL_FEE_LINES type may exist"; now only that unique-index race, others re-raised.
+       Test: test_only_the_all_fee_lines_race_is_mapped_to_a_400.
+Proof the tests bite: with the original code restored temporarily, 12 of the new tests failed
+(dates accepted; max_gpa 0 rejected by the database); files then restored byte-identically.
+Three earlier Phase 3 cases were adjusted, not removed: the effective_to-before-from cases
+now use two valid 2026 dates; the model case rejecting max_gpa 0 now rejects -0.01.
+
+9. Local data
+--------------
+This workspace's own databases were never migrated or written: db.sqlite3 and
+ground_truth.sqlite3 have the same SHA-256 before and after all Phase 3 work. The seed
+command was run only on the simulation copy.

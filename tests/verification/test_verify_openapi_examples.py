@@ -91,6 +91,19 @@ OPERATIONS = {
     "students_ledger_list": ("get", "/api/v1/students/STU-000001/ledger/", None),
     "students_statement_retrieve": ("get", "/api/v1/students/STU-000001/statement/", None),
     "students_balance_retrieve": ("get", "/api/v1/students/STU-000001/balance/", None),
+    # Phase 3: scholarships
+    "scholarship_types_list": ("get", "/api/v1/scholarship-types/", None),
+    "scholarship_types_create": ("post", "/api/v1/scholarship-types/", {}),
+    "scholarships_eligibility_checks_create": (
+        "post",
+        "/api/v1/scholarships/eligibility-checks/",
+        {},
+    ),
+    "eligibility_list": ("get", "/api/v1/eligibility/", None),
+    "scholarships_create": ("post", "/api/v1/scholarships/", {}),
+    "scholarships_list": ("get", "/api/v1/scholarships/", None),
+    "scholarships_retrieve": ("get", "/api/v1/scholarships/SCH-2026-000001/", None),
+    "scholarships_apply_create": ("post", "/api/v1/scholarships/SCH-2026-000001/apply/", {}),
 }
 
 TERM_2027 = {
@@ -127,7 +140,9 @@ def _graduate_then_reactivate(w):
 
 
 BILLING_OPERATIONS = {
-    op for op in OPERATIONS if op.startswith(("fee_", "invoices_", "billing_"))
+    op
+    for op in OPERATIONS
+    if op.startswith(("fee_", "invoices_", "billing_", "scholarship", "eligibility"))
 } | {
     "students_ledger_list",
     "students_statement_retrieve",
@@ -213,20 +228,97 @@ def _void_twice(w):
 
 
 def _void_with_scholarship(w):
-    """INVOICE_HAS_ALLOCATIONS needs a scholarship or payment allocation. Those tables
-    arrive in Phases 3–4; until then the allocation seam supplies a 40,000 scholarship."""
-    from types import SimpleNamespace
+    """INVOICE_HAS_ALLOCATIONS with a real applied scholarship (Phase 3): a 40,000 merit
+    award on STU-000001's invoice, applied, then the void request."""
+    from scholarships import services
 
-    from billing import services
-
-    w.monkeypatch.setattr(
-        services,
-        "allocations_for",
-        lambda inv: ([SimpleNamespace(amount=Decimal("40000.00"))], []),
-    )
+    services.apply_scholarship(_award_merit(w, requested_amount=Decimal("40000.00")), actor="t")
     return w.finance.post(
         f"/api/v1/invoices/{INV}/void/", {"void_date": "2026-08-21"}, format="json"
     )
+
+
+FULL_RIDE_TYPE = {
+    "name": "Second Full-Ride",
+    "category": "FULL_RIDE",
+    "exclusive_group": "FULL_RIDE",
+    "residency": "ALL",
+    "first_term_only": False,
+    "program_restricted": False,
+    "coverage_scope": "ALL_FEE_LINES",
+    "award_basis": "PERCENT",
+    "award_value": "100.00",
+    "max_amount_per_term": "600000.00",
+    "priority": 0,
+    "effective_from": "2026-01-01",
+}
+RESTRICTED_TYPE = {
+    **FULL_RIDE_TYPE,
+    "name": "Restricted",
+    "category": "PROGRAM",
+    "exclusive_group": None,
+    "coverage_scope": "ELIGIBLE_LINES_ONLY",
+    "priority": 9,
+    "program_restricted": True,
+}
+
+
+def _award_merit(w, **kw):
+    from scholarships import services
+    from scholarships.models import Eligibility
+
+    return services.award_scholarship(
+        eligibility=Eligibility.objects.get(pk="ELG-2026-000002"),
+        invoice=w.invoice,
+        actor="t",
+        **kw,
+    )
+
+
+def _second_merit_award(w):
+    from scholarships import services
+
+    _award_merit(w)
+    services.evaluate_eligibility(student=w.student, term=w.fall)  # ELG-2026-000008..14
+    return w.finance.post(
+        "/api/v1/scholarships/",
+        {"eligibility_id": "ELG-2026-000009", "invoice_id": INV},
+        format="json",
+    )
+
+
+def _apply_before_award_date(w):
+    _award_merit(w)
+    return w.finance.post(
+        "/api/v1/scholarships/SCH-2026-000001/apply/", {"allocated_on": "2026-08-19"}, format="json"
+    )
+
+
+def _apply_twice(w):
+    from scholarships import services
+
+    services.apply_scholarship(_award_merit(w), actor="t")
+    return w.finance.post("/api/v1/scholarships/SCH-2026-000001/apply/", {}, format="json")
+
+
+def _apply_above_base(w):
+    """BR-SCH-04 at apply: an award inserted without the award-stage guardrail (as an
+    injected anomaly would be) cannot be applied above the eligible fee base."""
+    from scholarships.models import Eligibility, Scholarship
+
+    elig = Eligibility.objects.get(pk="ELG-2026-000002")
+    Scholarship.objects.create(
+        scholarship_id="SCH-2026-000001",
+        student=w.student,
+        scholarship_type=elig.scholarship_type,
+        term=w.fall,
+        eligibility=elig,
+        invoice=w.invoice,
+        awarded_amount=Decimal("200000.00"),
+        award_date=date(2026, 8, 20),
+        status="OFFERED",
+    )
+    return w.finance.post("/api/v1/scholarships/SCH-2026-000001/apply/", {}, format="json")
 
 
 SPECIFIC = {
@@ -408,6 +500,62 @@ SPECIFIC = {
     ("students_balance_retrieve", 404, "Unknown Student"): lambda w: w.finance.get(
         "/api/v1/students/STU-999999/balance/"
     ),
+    # --- Phase 3: scholarships ---
+    ("scholarship_types_list", 400, "Invalid category filter"): lambda w: w.finance.get(
+        "/api/v1/scholarship-types/", {"category": "SPORTS"}
+    ),
+    ("scholarship_types_create", 400, "Program list missing for a restricted type"): lambda w: (
+        w.finance.post("/api/v1/scholarship-types/", RESTRICTED_TYPE, format="json")
+    ),
+    ("scholarship_types_create", 400, "Second ALL_FEE_LINES type"): lambda w: w.finance.post(
+        "/api/v1/scholarship-types/", FULL_RIDE_TYPE, format="json"
+    ),
+    ("scholarships_eligibility_checks_create", 400, "Unknown student"): lambda w: w.finance.post(
+        "/api/v1/scholarships/eligibility-checks/",
+        {"student_id": "STU-999999", "term_id": "TERM-2026-FALL"},
+        format="json",
+    ),
+    ("scholarships_eligibility_checks_create", 400, "evaluated_on sent"): lambda w: w.finance.post(
+        "/api/v1/scholarships/eligibility-checks/",
+        {"student_id": "STU-000001", "term_id": "TERM-2026-FALL", "evaluated_on": "2026-09-01"},
+        format="json",
+    ),
+    ("scholarships_eligibility_checks_create", 422, "Term not billable"): lambda w: w.finance.post(
+        "/api/v1/scholarships/eligibility-checks/",
+        {"student_id": "STU-000001", "term_id": "TERM-2025-SPRING"},
+        format="json",
+    ),
+    ("eligibility_list", 400, "Invalid evaluated_on filter"): lambda w: w.finance.get(
+        "/api/v1/eligibility/", {"evaluated_on": "2026-13-01"}
+    ),
+    ("scholarships_create", 400, "requested_amount not positive"): lambda w: w.finance.post(
+        "/api/v1/scholarships/",
+        {"eligibility_id": "ELG-2026-000002", "invoice_id": INV, "requested_amount": "0.00"},
+        format="json",
+    ),
+    ("scholarships_create", 409, "Exclusive group conflict"): _second_merit_award,
+    ("scholarships_create", 422, "Not a positive eligibility"): lambda w: w.finance.post(
+        "/api/v1/scholarships/",
+        {"eligibility_id": "ELG-2026-000003", "invoice_id": INV},
+        format="json",
+    ),
+    ("scholarships_create", 422, "Over the maximum award"): lambda w: w.finance.post(
+        "/api/v1/scholarships/",
+        {"eligibility_id": "ELG-2026-000002", "invoice_id": INV, "requested_amount": "75000.01"},
+        format="json",
+    ),
+    ("scholarships_list", 400, "Invalid status filter"): lambda w: w.finance.get(
+        "/api/v1/scholarships/", {"status": "PENDING"}
+    ),
+    ("scholarships_retrieve", 404, "Unknown Scholarship"): lambda w: w.finance.get(
+        "/api/v1/scholarships/SCH-2026-999999/"
+    ),
+    ("scholarships_apply_create", 400, "allocated_on before the award"): _apply_before_award_date,
+    ("scholarships_apply_create", 404, "Unknown Scholarship"): lambda w: w.finance.post(
+        "/api/v1/scholarships/SCH-2026-999999/apply/", {}, format="json"
+    ),
+    ("scholarships_apply_create", 409, "Already applied"): _apply_twice,
+    ("scholarships_apply_create", 422, "Above the eligible fee base"): _apply_above_base,
 }
 
 
@@ -462,6 +610,19 @@ def world(api_client_for, student, terms, program, monkeypatch):
     )
     services.complete_enrollment(spring, on_date=date(2026, 5, 10), actor="t")
     assert (w.invoice.invoice_id, spring.enrollment_id) == (INV, "ENR-2026-000002")
+    # Phase 3: the 7 documented types and STU-000001's FALL evaluation (ELG-2026-000001..7,
+    # in priority order: SCT-007, SCT-001, …, SCT-006)
+    from django.core.management import call_command
+
+    from scholarships import services as scholarships
+
+    call_command("seed_scholarship_types", verbosity=0)
+    rows = scholarships.evaluate_eligibility(student=student, term=w.fall)
+    assert [(e.pk, e.scholarship_type_id) for e in rows[:3]] == [
+        ("ELG-2026-000001", "SCT-007"),
+        ("ELG-2026-000002", "SCT-001"),
+        ("ELG-2026-000003", "SCT-002"),
+    ]
     return w
 
 
@@ -471,7 +632,9 @@ def test_documented_examples_were_found():
     # Phase 2 billing 56: fee-schedules list 4, create 5, new-version 6, history 3;
     # invoices list 4, retrieve 3, generate 7, void 7; late fees 3, refresh 3;
     # student ledger 4, statement 3, balance 4
-    assert len(EXAMPLES) == 56 + 56
+    # Phase 3 scholarships 36: types list 4, create 4; eligibility checks 5, list 4;
+    # scholarships create 6, list 4, retrieve 3, apply 6
+    assert len(EXAMPLES) == 56 + 56 + 36
     assert {op for op, *_ in EXAMPLES} >= set(OPERATIONS) | {"health_check"}
 
 
@@ -500,6 +663,7 @@ RESOURCE_OF = {
     "enrollments": "Enrollment",
     "fee-schedules": "FeeSchedule",
     "invoices": "Invoice",
+    "scholarships": "Scholarship",
 }
 
 

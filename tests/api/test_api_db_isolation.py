@@ -1,6 +1,6 @@
 """Requirement 8: application endpoints use the default database only.
 
-Every Phase 1 and Phase 2 endpoint is exercised while queries on every non-default connection are
+Every Phase 1, 2 and 3 endpoint is exercised while queries on every non-default connection are
 captured; none may be issued. This proves the API cannot read ground truth.
 """
 
@@ -108,4 +108,53 @@ def test_no_billing_query_reaches_any_non_default_database(api_client_for, stude
         ]
     assert [c.status_code for c in calls] == [201, 201] + [200] * 10
     assert len(default.captured_queries) > 0
+    assert {a: len(ctx.captured_queries) for a, ctx in captured.items()} == dict.fromkeys(others, 0)
+
+
+def test_no_scholarship_query_reaches_any_non_default_database(
+    api_client_for, student, terms, program
+):
+    """Phase 3: the same proof for every scholarship endpoint."""
+    from datetime import date
+
+    from django.core.management import call_command
+
+    from academics import services
+    from billing import services as billing
+    from tests.billing_fixtures import make_fees
+
+    enrollment = services.enroll(
+        student=student,
+        term=terms["TERM-2026-FALL"],
+        credits=16,
+        enrolled_on=date(2026, 8, 10),
+        actor="t",
+    )
+    make_fees(program, terms["TERM-2026-FALL"])
+    inv = billing.generate_invoice(enrollment=enrollment, actor="t").pk
+    call_command("seed_scholarship_types", verbosity=0)
+    finance = api_client_for("platform_admin")
+    others = [a for a in connections if a != DEFAULT_DB_ALIAS]
+    with ExitStack() as stack:
+        captured = {a: stack.enter_context(CaptureQueriesContext(connections[a])) for a in others}
+        stack.enter_context(CaptureQueriesContext(connections[DEFAULT_DB_ALIAS]))
+        calls = [
+            finance.get("/api/v1/scholarship-types/"),
+            finance.post(
+                "/api/v1/scholarships/eligibility-checks/",
+                {"student_id": student.pk, "term_id": "TERM-2026-FALL"},
+                format="json",
+            ),
+            finance.get("/api/v1/eligibility/"),
+            finance.post(
+                "/api/v1/scholarships/",
+                {"eligibility_id": "ELG-2026-000002", "invoice_id": inv},
+                format="json",
+            ),
+            finance.post("/api/v1/scholarships/SCH-2026-000001/apply/", {}, format="json"),
+            finance.get("/api/v1/scholarships/"),
+            finance.get("/api/v1/scholarships/SCH-2026-000001/"),
+            finance.get(f"/api/v1/students/{student.pk}/balance/"),
+        ]
+    assert [c.status_code for c in calls] == [200, 201, 200, 201, 200, 200, 200, 200]
     assert {a: len(ctx.captured_queries) for a, ctx in captured.items()} == dict.fromkeys(others, 0)

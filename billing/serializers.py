@@ -175,7 +175,7 @@ class InvoiceAmountsSerializer(serializers.Serializer):
     original_charges = MoneyField(help_text="Σ net of FEE + LATE_FEE lines (after waivers)")
     adjustments = MoneyField(help_text="Σ ADJUSTMENT lines (≤ 0); never payment or scholarship")
     net_charges = MoneyField()
-    scholarship_applied = MoneyField(help_text="0.00 until scholarships exist (Phase 3)")
+    scholarship_applied = MoneyField(help_text="Σ net scholarship allocations (APPLY − REVERSE)")
     amount_paid = MoneyField(help_text="Every payer; 0.00 until payments exist (Phase 4)")
     payments_by_payer = PaymentsByPayerSerializer()
     outstanding = MoneyField()
@@ -364,8 +364,13 @@ class CollectionRefreshResultSerializer(serializers.Serializer):
 class LedgerEntrySerializer(serializers.ModelSerializer):
     student = serializers.CharField(source="student_id", read_only=True)
     amount = MoneyField(read_only=True)
-    source_type = serializers.SerializerMethodField()
+    source_type = serializers.SerializerMethodField(
+        help_text="INVOICE_LINE or SCHOLARSHIP_ALLOCATION (PAYMENT / REFUND from Phase 4)"
+    )
     invoice_line = serializers.CharField(source="invoice_line_id", read_only=True, allow_null=True)
+    scholarship_allocation = serializers.CharField(
+        source="scholarship_allocation_id", read_only=True, allow_null=True
+    )
     invoice = serializers.SerializerMethodField()
 
     class Meta:
@@ -378,21 +383,38 @@ class LedgerEntrySerializer(serializers.ModelSerializer):
             "amount",
             "source_type",
             "invoice_line",
+            "scholarship_allocation",
             "invoice",
             "memo",
         ]
         read_only_fields = fields
 
     def get_source_type(self, obj) -> str:
-        return "INVOICE_LINE"  # Phase 2: every entry posts from an invoice line
+        return "SCHOLARSHIP_ALLOCATION" if obj.scholarship_allocation_id else "INVOICE_LINE"
 
     def get_invoice(self, obj) -> str | None:
-        return obj.invoice_line.invoice_id if obj.invoice_line_id else None
+        if obj.invoice_line_id:
+            return obj.invoice_line.invoice_id
+        if obj.scholarship_allocation_id:  # reached through the relation; no app import
+            return obj.scholarship_allocation.invoice_line.invoice_id
+        return None
+
+
+class AllocationRefSerializer(serializers.Serializer):
+    """A scholarship allocation as billing shows it (read from the allocation registry)."""
+
+    allocation_id = serializers.CharField()
+    scholarship = serializers.CharField(source="scholarship_id")
+    invoice_line = serializers.CharField(source="invoice_line_id")
+    allocation_type = serializers.CharField(help_text="APPLY or REVERSE")
+    amount = MoneyField(help_text="signed: APPLY > 0, REVERSE < 0")
+    reason = serializers.CharField()
+    allocated_on = serializers.DateField()
 
 
 class StatementInvoiceSerializer(InvoiceDetailSerializer):
     scholarship_allocations = serializers.SerializerMethodField(
-        help_text="Empty until scholarships exist (Phase 3)"
+        help_text="APPLY and REVERSE scholarship allocations on this invoice's lines"
     )
     payment_allocations = serializers.SerializerMethodField(
         help_text="Empty until payments exist (Phase 4)"
@@ -406,9 +428,12 @@ class StatementInvoiceSerializer(InvoiceDetailSerializer):
         ]
         read_only_fields = fields
 
-    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    @extend_schema_field(AllocationRefSerializer(many=True))
     def get_scholarship_allocations(self, obj):
-        return []
+        from billing.services import allocations_for
+
+        scholarship, _ = allocations_for(obj)
+        return AllocationRefSerializer(scholarship, many=True).data
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_payment_allocations(self, obj):
@@ -433,8 +458,8 @@ class BalanceBreakdownSerializer(serializers.Serializer):
     charges = MoneyField()
     late_fees = MoneyField()
     adjustments = MoneyField()
-    scholarship_credits = MoneyField(help_text="0.00 until Phase 3")
-    scholarship_reversals = MoneyField(help_text="0.00 until Phase 3")
+    scholarship_credits = MoneyField(help_text="Σ SCHOLARSHIP_CREDIT entries (≤ 0)")
+    scholarship_reversals = MoneyField(help_text="Σ SCHOLARSHIP_REVERSAL entries (≥ 0)")
     payments = MoneyField(help_text="0.00 until Phase 4")
     payments_by_payer = PaymentsByPayerSerializer()
     refunds = MoneyField(help_text="0.00 until Phase 4")

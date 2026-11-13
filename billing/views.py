@@ -547,7 +547,8 @@ class CollectionRefreshView(_BatchView):
     ledger=extend_schema(
         summary="A student's ledger entries",
         description="Entries with their source reference, by entry_date then entry_id. "
-        "Phase 2 entries post from invoice lines (CHARGE, LATE_FEE, ADJUSTMENT).",
+        "Entries post from invoice lines (CHARGE, LATE_FEE, ADJUSTMENT) and scholarship "
+        "allocations (SCHOLARSHIP_CREDIT, SCHOLARSHIP_REVERSAL).",
         tags=["billing"],
         responses={
             200: LedgerEntrySerializer(many=True),
@@ -557,7 +558,7 @@ class CollectionRefreshView(_BatchView):
     statement=extend_schema(
         summary="A student's statement",
         description="Invoices → lines with open amounts, scholarship and payment allocations, "
-        "refunds. Allocations and refunds are empty until Phases 3–4.",
+        "refunds. Payment allocations and refunds are empty until Phase 4.",
         tags=["billing"],
         responses={
             200: StatementSerializer,
@@ -567,8 +568,8 @@ class CollectionRefreshView(_BatchView):
     balance=extend_schema(
         summary="A student's ledger balance",
         description="BR-BAL-01 ledger balance (entries dated on or before as_of, or all), its "
-        "breakdown and the BR-BAL-02 identity check. Scholarship, payment and refund "
-        "components are 0.00 until Phases 3–4.",
+        "breakdown and the BR-BAL-02 identity check. Payment and refund components are "
+        "0.00 until Phase 4.",
         tags=["billing"],
         parameters=[OpenApiParameter("as_of", type=str, required=False, description="YYYY-MM-DD")],
         responses={
@@ -591,7 +592,7 @@ class StudentAccountViewSet(_BillingPermissions, viewsets.GenericViewSet):
         student = self._student(pk)
         entries = (
             LedgerEntry.objects.filter(student=student)
-            .select_related("invoice_line")
+            .select_related("invoice_line", "scholarship_allocation__invoice_line")
             .order_by("entry_date", "entry_id")
         )
         page = self.paginate_queryset(entries)

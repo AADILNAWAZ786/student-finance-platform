@@ -18,14 +18,10 @@ from billing.calculators import LEDGER_SIGN
 
 DESIGN = Path(settings.BASE_DIR) / "docs" / "DATABASE_DESIGN.md"
 
-# column / entry type -> the phase that adds it (ARCHITECTURE §16)
-STAGED_COLUMNS = {"scholarship_allocation": 3, "payment": 4, "refund": 4}
-STAGED_ENTRY_TYPES = {
-    "SCHOLARSHIP_CREDIT": 3,
-    "SCHOLARSHIP_REVERSAL": 3,
-    "PAYMENT": 4,
-    "REFUND": 4,
-}
+# column / entry type -> the phase that adds it (ARCHITECTURE §16). Phase 3 added
+# scholarship_allocation, SCHOLARSHIP_CREDIT and SCHOLARSHIP_REVERSAL (billing 0002).
+STAGED_COLUMNS = {"payment": 4, "refund": 4}
+STAGED_ENTRY_TYPES = {"PAYMENT": 4, "REFUND": 4}
 
 
 def _section(text: str, start: str, end: str) -> str:
@@ -133,16 +129,17 @@ def test_D1_ledger_entry_is_the_design_minus_the_staged_sources(design):
     assert set(actual) & set(STAGED_COLUMNS) == set()
     for name, field in actual.items():
         _check_type(field, expected[name])
-    assert actual["invoice_line"].unique and actual["invoice_line"].null  # "U", optional source
+    for source in ("invoice_line", "scholarship_allocation"):
+        assert actual[source].unique and actual[source].null  # "U", optional source
 
 
 def test_D1_staged_sources_name_their_design_models(design):
     rows = {name: (t, rest) for name, t, rest in design["LedgerEntry"]}
     assert {k: rows[k][0] for k in STAGED_COLUMNS} == {
-        "scholarship_allocation": "→ ScholarshipAllocation",
         "payment": "→ Payment",
         "refund": "→ Refund",
     }
+    assert rows["scholarship_allocation"][0] == "→ ScholarshipAllocation"  # Phase 3: built
     assert all(rows[k][1].rstrip().endswith("U") for k in STAGED_COLUMNS)
 
 

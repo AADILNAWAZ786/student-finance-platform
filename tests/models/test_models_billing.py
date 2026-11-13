@@ -409,7 +409,8 @@ def test_ledger_entry_valid_and_zero_charge(free_line):
         {"entry_type": "ADJUSTMENT", "amount": D("0")},
         {"entry_type": "ADJUSTMENT", "amount": D("1")},
         {"entry_type": "PAYMENT", "amount": D("-1")},  # Phase 4 type: not allowed yet (D1)
-        {"entry_type": "SCHOLARSHIP_CREDIT", "amount": D("-1")},  # Phase 3 type (D1)
+        # Phase 3: a scholarship type needs a scholarship-allocation source, not a line
+        {"entry_type": "SCHOLARSHIP_CREDIT", "amount": D("-1")},
         {"invoice_line": None},  # exactly one source
     ],
 )

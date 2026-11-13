@@ -1,6 +1,6 @@
 """V-ISO: normal API endpoints never read from or write to the ground_truth database.
 
-Every Phase 1 and Phase 2 operation is called on success *and* error paths (400, 401, 403, 404, 405,
+Every Phase 1, 2 and 3 operation is called on success *and* error paths (400, 401, 403, 404, 405,
 409, 422) while every query on every non-default connection is captured.
 """
 
@@ -332,3 +332,121 @@ def test_router_refuses_billing_migrations_on_ground_truth():
             is False
         )
         assert router.allow_migrate("default", "billing", model_name=model._meta.model_name) is True
+
+
+# --- Phase 3: scholarships ------------------------------------------------------------------------
+
+
+def _scholarship_calls(finance, staff, anon, inv):
+    yield finance.get("/api/v1/scholarship-types/")
+    yield finance.post(
+        "/api/v1/scholarship-types/",
+        {
+            "name": "Test Grant",
+            "category": "NEED",
+            "residency": "ALL",
+            "first_term_only": False,
+            "program_restricted": False,
+            "coverage_scope": "ELIGIBLE_LINES_ONLY",
+            "award_basis": "FIXED",
+            "award_value": "1000.00",
+            "max_amount_per_term": "1000.00",
+            "priority": 9,
+            "effective_from": "2026-01-01",
+        },
+        format="json",
+    )
+    yield finance.post("/api/v1/scholarship-types/", {"name": "x"}, format="json")  # 400
+    yield finance.post(
+        "/api/v1/scholarships/eligibility-checks/",
+        {"student_id": "STU-000001", "term_id": "TERM-2026-FALL"},
+        format="json",
+    )
+    yield finance.post(
+        "/api/v1/scholarships/eligibility-checks/",
+        {"student_id": "STU-000001", "term_id": "TERM-2025-FALL"},
+        format="json",
+    )  # 422
+    yield finance.get("/api/v1/eligibility/")
+    yield finance.post(
+        "/api/v1/scholarships/",
+        {"eligibility_id": "ELG-2026-000002", "invoice_id": inv},
+        format="json",
+    )
+    yield finance.post(
+        "/api/v1/scholarships/",
+        {"eligibility_id": "ELG-2026-000003", "invoice_id": inv},
+        format="json",
+    )  # 422 not eligible
+    yield finance.post("/api/v1/scholarships/SCH-2026-000001/apply/", {}, format="json")
+    yield finance.post("/api/v1/scholarships/SCH-2026-000001/apply/", {}, format="json")  # 409
+    yield finance.get("/api/v1/scholarships/")
+    yield finance.get("/api/v1/scholarships/SCH-2026-000001/")
+    yield finance.get("/api/v1/scholarships/SCH-2026-999999/")  # 404
+    yield finance.get(f"/api/v1/invoices/{inv}/")
+    yield finance.get("/api/v1/students/STU-000001/statement/")
+    yield staff.post("/api/v1/scholarships/eligibility-checks/", {}, format="json")  # 403
+    yield anon.get("/api/v1/scholarships/")  # 401
+
+
+def test_no_scholarship_operation_touches_ground_truth(
+    api_client_for, staff_api, student, terms, program
+):
+    from django.core.management import call_command
+
+    from academics import services
+    from billing import services as billing
+    from tests.billing_fixtures import make_fees
+
+    enrollment = services.enroll(
+        student=student,
+        term=terms["TERM-2026-FALL"],
+        credits=16,
+        enrolled_on=date(2026, 8, 10),
+        actor="t",
+    )
+    make_fees(program, terms["TERM-2026-FALL"])
+    inv = billing.generate_invoice(enrollment=enrollment, actor="t").pk
+    call_command("seed_scholarship_types", verbosity=0)
+    finance = api_client_for("platform_admin")
+    others = [a for a in connections if a != DEFAULT_DB_ALIAS]
+    with ExitStack() as stack:
+        captured = {a: stack.enter_context(CaptureQueriesContext(connections[a])) for a in others}
+        default = stack.enter_context(CaptureQueriesContext(connections[DEFAULT_DB_ALIAS]))
+        statuses = [r.status_code for r in _scholarship_calls(finance, staff_api, APIClient(), inv)]
+    assert statuses == [
+        200, 201, 400,  # types
+        201, 422, 200,  # eligibility check, non-billable term, history
+        201, 422, 200, 409,  # award, ineligible award, apply, apply again
+        200, 200, 404, 200, 200,  # reads
+        403, 401,
+    ]  # fmt: skip
+    writes = [
+        q["sql"] for q in default.captured_queries if q["sql"].lstrip().upper().startswith("INSERT")
+    ]
+    assert any("scholarships_scholarshipallocation" in w for w in writes)
+    assert any("billing_ledgerentry" in w for w in writes)
+    assert {a: ctx.captured_queries for a, ctx in captured.items()} == {"ground_truth": []}
+
+
+def test_ground_truth_database_holds_no_scholarship_tables():
+    gt = connections["ground_truth"].introspection.table_names()
+    assert not [t for t in gt if t.startswith("scholarships_")]
+    assert {
+        "scholarships_scholarshiptype",
+        "scholarships_scholarshiptypeprogram",
+        "scholarships_eligibility",
+        "scholarships_scholarship",
+        "scholarships_scholarshipallocation",
+        "scholarships_scholarshipevent",
+    } <= set(connections["default"].introspection.table_names())
+
+
+def test_router_refuses_scholarship_migrations_on_ground_truth():
+    from django.apps import apps
+    from django.db import router
+
+    for model in apps.get_app_config("scholarships").get_models():
+        name = model._meta.model_name
+        assert router.allow_migrate("ground_truth", "scholarships", model_name=name) is False
+        assert router.db_for_read(model) == router.db_for_write(model) == "default"

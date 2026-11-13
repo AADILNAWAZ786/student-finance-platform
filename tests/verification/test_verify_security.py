@@ -7,6 +7,7 @@ Role matrix implemented in Phase 1 (core.permissions), W = platform_admin + acad
 Phase 2 billing (decision D6): fee schedules, invoices, billing batches and the student
 ledger/statement/balance: read platform_admin + support_staff, write platform_admin only.
 Academic administrators and instructors get no financial data; learners stay blocked (L1).
+Phase 3 scholarships (types, eligibility, awards, apply) use the same billing matrix.
 Superusers pass everything. Users without a role are denied everything.
 """
 
@@ -74,6 +75,33 @@ OPS = [
     ("students.ledger", "get", "/api/v1/students/STU-000001/ledger/", None, BILLING_READERS),
     ("students.statement", "get", "/api/v1/students/STU-000001/statement/", None, BILLING_READERS),
     ("students.balance", "get", "/api/v1/students/STU-000001/balance/", None, BILLING_READERS),
+    # Phase 3: scholarships
+    ("scholarship_types.list", "get", "/api/v1/scholarship-types/", None, BILLING_READERS),
+    ("scholarship_types.create", "post", "/api/v1/scholarship-types/", "sch_type", BILLING_WRITERS),
+    (
+        "scholarships.eligibility_checks",
+        "post",
+        "/api/v1/scholarships/eligibility-checks/",
+        "eligibility_check",
+        BILLING_WRITERS,
+    ),
+    ("eligibility.list", "get", "/api/v1/eligibility/", None, BILLING_READERS),
+    ("scholarships.list", "get", "/api/v1/scholarships/", None, BILLING_READERS),
+    (
+        "scholarships.retrieve",
+        "get",
+        "/api/v1/scholarships/SCH-2026-000001/",
+        None,
+        BILLING_READERS,
+    ),
+    ("scholarships.create", "post", "/api/v1/scholarships/", "award", BILLING_WRITERS),
+    (
+        "scholarships.apply",
+        "post",
+        "/api/v1/scholarships/SCH-2026-000001/apply/",
+        "apply",
+        BILLING_WRITERS,
+    ),
 ]
 SUCCESS = {"get": 200, "post": 201, "patch": 200}
 # documented success code per operation (status change updates a record: 200, not 201)
@@ -82,6 +110,7 @@ SUCCESS_BY_OP = {
     "invoices.void": 200,
     "late_fees.assess": 200,
     "collection.refresh": 200,
+    "scholarships.apply": 200,
 }
 
 
@@ -140,6 +169,22 @@ def _body(kind, n):
         "generate": {"enrollment_id": "ENR-2026-000002"},
         "void": {"void_date": "2026-09-08"},  # the world invoice is issued 2026-09-07
         "as_of": {"as_of_date": "2026-09-29"},
+        "sch_type": {
+            "name": "Test Grant",
+            "category": "NEED",
+            "residency": "ALL",
+            "first_term_only": False,
+            "program_restricted": False,
+            "coverage_scope": "ELIGIBLE_LINES_ONLY",
+            "award_basis": "FIXED",
+            "award_value": "1000.00",
+            "max_amount_per_term": "1000.00",
+            "priority": 9,
+            "effective_from": "2026-01-01",
+        },
+        "eligibility_check": {"student_id": "STU-000001", "term_id": "TERM-2026-FALL"},
+        "award": {"eligibility_id": "ELG-2026-000005", "invoice_id": INV},  # SCT-004 STEM
+        "apply": {},  # empty body: deterministic default allocated_on
     }[kind]
 
 
@@ -168,6 +213,17 @@ def world(student, terms, program, make_student):
         actor="t",
     )
     assert other.enrollment_id == "ENR-2026-000002"
+    # Phase 3: seeded types, STU-000001's FALL evaluation and an OFFERED merit award
+    from django.core.management import call_command
+
+    from scholarships import services as scholarships
+
+    call_command("seed_scholarship_types", verbosity=0)
+    rows = scholarships.evaluate_eligibility(student=student, term=terms["TERM-2026-FALL"])
+    award = scholarships.award_scholarship(
+        eligibility=rows[1], invoice=enrollment.invoices.get(), actor="t"
+    )
+    assert (rows[4].scholarship_type_id, award.pk) == ("SCT-004", "SCH-2026-000001")
 
 
 def _call(client, method, path, body):

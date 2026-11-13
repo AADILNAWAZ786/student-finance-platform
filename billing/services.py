@@ -26,6 +26,7 @@ from datetime import date, timedelta
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
+from billing import allocations as allocation_registry
 from billing import calculators as calc
 from billing import policy
 from billing.lifecycle import ISSUED, LIFECYCLE_TRANSITIONS, VOID, can_void
@@ -58,20 +59,33 @@ def check_business_date(field: str, value: date) -> None:
 def allocations_for(invoice) -> tuple[list, list]:
     """(scholarship allocations, payment allocations) on the invoice's lines.
 
-    Neither table exists in Phase 2, so both are empty. Phase 3 (ScholarshipAllocation)
-    and Phase 4 (PaymentAllocation) fill this in; every caller (amounts, void, late fees,
-    collection status) already goes through it.
+    Read from the allocation registry (``billing.allocations``, decision D-S1): the
+    scholarships app registers its provider (Phase 3) and payments will register theirs
+    (Phase 4). Billing never imports either app. Every caller (amounts, open amounts, void,
+    late fees, collection status, statement, balance) goes through this one function.
     """
-    return [], []
+    return allocation_registry.allocations("scholarship", invoice), allocation_registry.allocations(
+        "payment", invoice
+    )
+
+
+def _dated_on_or_before(rows, as_of: date | None) -> list:
+    rows = list(rows)
+    if as_of is None:
+        return rows
+    return [r for r in rows if getattr(r, "allocated_on", None) is None or r.allocated_on <= as_of]
 
 
 def current_amounts(invoice, lines=None, *, as_of: date | None = None) -> calc.InvoiceAmounts:
-    """BR-INV-04 amounts from the stored rows (rows dated after ``as_of`` excluded)."""
+    """BR-INV-04 amounts from the stored rows (lines and allocations dated after ``as_of``
+    excluded)."""
     lines = list(invoice.lines.all()) if lines is None else list(lines)
     if as_of is not None:
         lines = [line for line in lines if line.posted_date <= as_of]
     scholarship, payments = allocations_for(invoice)
-    return calc.invoice_amounts(lines, scholarship, payments)
+    return calc.invoice_amounts(
+        lines, _dated_on_or_before(scholarship, as_of), _dated_on_or_before(payments, as_of)
+    )
 
 
 def _event(
@@ -131,6 +145,56 @@ def _set_collection_status(invoice, *, as_of: date, reason: str, actor: str, sou
     invoice.collection_status_as_of = as_of
     invoice.save(update_fields=["collection_status", "collection_status_as_of"])
     return old, new
+
+
+def recalculate_collection_status(
+    invoice, *, as_of: date, reason: str, actor: str, source_ref=None
+):
+    """Public BR-INV-07 hook for higher apps (scholarships now, payments in Phase 4).
+
+    Derives the status at ``max(as_of, invoice.collection_status_as_of)`` (a status is
+    never moved back in time) and writes a COLLECTION event only when it changes.
+    Must run inside the caller's transaction.
+    """
+    invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
+    effective = max(as_of, invoice.collection_status_as_of)
+    return _set_collection_status(
+        invoice, as_of=effective, reason=reason, actor=actor, source_ref=source_ref
+    )
+
+
+SCHOLARSHIP_ENTRY_TYPE = {"APPLY": "SCHOLARSHIP_CREDIT", "REVERSE": "SCHOLARSHIP_REVERSAL"}
+
+
+def post_scholarship_ledger(allocation, *, student_id: str) -> LedgerEntry:
+    """BR-LED-01 for a scholarship allocation (given as a plain object; billing does not
+    import scholarships). APPLY → SCHOLARSHIP_CREDIT (−amount); REVERSE (amount < 0) →
+    SCHOLARSHIP_REVERSAL (+|amount|). ``entry_date`` = ``allocated_on``.
+    """
+    entry_type = SCHOLARSHIP_ENTRY_TYPE[allocation.allocation_type]
+    entry = LedgerEntry(
+        entry_id=next_id("ledger_entry", year=allocation.allocated_on.year),
+        student_id=student_id,
+        entry_date=allocation.allocated_on,
+        entry_type=entry_type,
+        amount=calc.ledger_amount(entry_type, abs(allocation.amount)),
+        invoice_line=None,
+        scholarship_allocation_id=allocation.pk,
+        memo=f"{allocation.allocation_type} {allocation.pk} on {allocation.invoice_line_id}"[:120],
+    )
+    entry.save(force_insert=True)
+    return entry
+
+
+def release_payments_for_scholarship(*, invoice, releases, on_date: date, actor: str, source_ref):
+    """BR-ALC-06 hook: free payment money on lines a scholarship now covers.
+
+    Delegates to the handler payments registers (Phase 4). With no handler, any non-zero
+    release raises ``PaymentReleaseUnavailable`` inside the caller's transaction.
+    """
+    allocation_registry.release_payments(
+        invoice=invoice, releases=releases, on_date=on_date, actor=actor, source_ref=source_ref
+    )
 
 
 # --- fee schedules (BR-FEE-01..04) ---------------------------------------------------------------
@@ -665,7 +729,7 @@ def refresh_collection_status(*, as_of: date, actor: str) -> dict:
 def student_balance(student, as_of: date | None) -> dict:
     """BR-BAL-01 ledger balance, its breakdown, and the BR-BAL-02 identity check.
 
-    Scholarship, payment and refund components are 0 until Phases 3–4 add their rows.
+    Payment and refund components are 0 until Phase 4 adds their rows.
     """
     entries = list(student.ledger_entries.all())
     included = [e for e in entries if as_of is None or e.entry_date <= as_of]
@@ -688,8 +752,8 @@ def student_balance(student, as_of: date | None) -> dict:
             "charges": dsum(by_type["CHARGE"]),
             "late_fees": dsum(by_type["LATE_FEE"]),
             "adjustments": dsum(by_type["ADJUSTMENT"]),
-            "scholarship_credits": ZERO,
-            "scholarship_reversals": ZERO,
+            "scholarship_credits": dsum(by_type["SCHOLARSHIP_CREDIT"]),
+            "scholarship_reversals": dsum(by_type["SCHOLARSHIP_REVERSAL"]),
             "payments": ZERO,
             "payments_by_payer": {p: ZERO for p in calc.PAYER_TYPES},
             "refunds": ZERO,

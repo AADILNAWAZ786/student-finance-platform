@@ -1,6 +1,6 @@
-"""ARCHITECTURE §9.3 demonstration workflow, steps 1–3b, entirely through the API.
+"""ARCHITECTURE §9.3 demonstration workflow, steps 1–5, entirely through the API.
 
-Later steps (4 scholarships … 11 anomalies) are added by the phase that builds them. The
+Later steps (6 payments … 11 anomalies) are added by the phase that builds them. The
 documented IDs (STU-010001, ENR-2026-030001) assume the generated dataset is loaded; on an
 empty database the same calls produce the first IDs (STU-000001, ENR-2026-000001).
 """
@@ -148,3 +148,116 @@ def test_workflow_steps_1_to_3b(api, master_data):
     assert r.json()["error"]["details"]["existing_invoice_id"] == invoice["invoice_id"]
     assert _ok(api.get("/api/v1/invoices/"), 200)["count"] == 1
     assert _ok(api.get(f"/api/v1/students/{sid}/ledger/"), 200)["count"] == 4
+
+
+def _create_documented_types_via_api(api, program_id):
+    from scholarships.management.commands.seed_scholarship_types import SPECS
+
+    for spec in sorted(SPECS, key=lambda s: s.scholarship_type_id):
+        body = {
+            k: (str(v) if hasattr(v, "quantize") else v)
+            for k, v in vars(spec).items()
+            if k != "scholarship_type_id"
+        }
+        body.update(
+            effective_from="2026-01-01", program_ids=[program_id] if spec.program_restricted else []
+        )
+        created = _ok(api.post("/api/v1/scholarship-types/", body, format="json"), 201)
+        assert created["scholarship_type_id"] == spec.scholarship_type_id
+
+
+def test_workflow_steps_4_and_5(api, master_data):
+    """§9.3 step 4: 7 results with reason codes. Step 5: award capped at eligible fees and
+    applied; an over-cap request → 422."""
+    _create_documented_types_via_api(api, master_data["program_id"])
+    student = _ok(
+        api.post(
+            "/api/v1/students/",
+            {
+                "first_name": "Ravi",
+                "last_name": "Iyer",
+                "email": "ravi.iyer@example.edu",
+                "date_of_birth": "2006-05-01",
+                "residency": "DOMESTIC",
+                "program": master_data["program_id"],
+                "admit_term": "TERM-2026-FALL",
+                "gpa": "3.72",
+                "need_index": "0.45",
+            },
+            format="json",
+        ),
+        201,
+    )
+    sid = student["student_id"]
+    enrollment = _ok(
+        api.post(
+            "/api/v1/enrollments/",
+            {"student": sid, "term": "TERM-2026-FALL", "credits": 16, "enrolled_on": "2026-08-10"},
+            format="json",
+        ),
+        201,
+    )
+    invoice = _ok(
+        api.post(
+            "/api/v1/invoices/generate/",
+            {"enrollment_id": enrollment["enrollment_id"]},
+            format="json",
+        ),
+        201,
+    )
+
+    # 4. eligibility check: one result per type, with reason codes
+    results = _ok(
+        api.post(
+            "/api/v1/scholarships/eligibility-checks/",
+            {"student_id": sid, "term_id": "TERM-2026-FALL"},
+            format="json",
+        ),
+        201,
+    )
+    assert len(results) == 7
+    by_type = {r["scholarship_type"]: r for r in results}
+    assert {k for k, r in by_type.items() if r["is_eligible"]} == {"SCT-001", "SCT-004", "SCT-006"}
+    assert by_type["SCT-007"]["reason_codes"] == ["GPA_BELOW_MIN", "NEED_BELOW_MIN"]
+    assert all(r["reason_codes"] for r in results)
+
+    # 5. award: computed and capped at the eligible fees; over-cap request → 422
+    over = api.post(
+        "/api/v1/scholarships/",
+        {
+            "eligibility_id": by_type["SCT-001"]["eligibility_id"],
+            "invoice_id": invoice["invoice_id"],
+            "requested_amount": "75000.01",
+        },
+        format="json",
+    )
+    assert over.status_code == 422
+    assert over.json()["error"]["code"] == "SCHOLARSHIP_EXCEEDS_ELIGIBLE_FEES"
+    award = _ok(
+        api.post(
+            "/api/v1/scholarships/",
+            {
+                "eligibility_id": by_type["SCT-001"]["eligibility_id"],
+                "invoice_id": invoice["invoice_id"],
+            },
+            format="json",
+        ),
+        201,
+    )
+    assert award["awarded_amount"] == "75000.00"  # 50% of TUITION 144,000 + LAB 6,000
+    applied = _ok(
+        api.post(f"/api/v1/scholarships/{award['scholarship_id']}/apply/", {}, format="json"), 200
+    )
+    assert applied["status"] == "APPLIED" and applied["applied_amount"] == "75000.00"
+    inv = _ok(api.get(f"/api/v1/invoices/{invoice['invoice_id']}/"), 200)
+    assert (
+        inv["amounts"]["scholarship_applied"],
+        inv["amounts"]["outstanding"],
+        inv["collection_status"],
+    ) == (
+        "75000.00",
+        "84000.00",
+        "UNPAID",
+    )
+    balance = _ok(api.get(f"/api/v1/students/{sid}/balance/"), 200)
+    assert balance["ledger_balance"] == "84000.00" and balance["identity"]["holds"] is True

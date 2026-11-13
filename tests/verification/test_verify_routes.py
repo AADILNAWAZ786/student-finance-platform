@@ -1,4 +1,4 @@
-"""V-ROUTE: every Phase 1 and Phase 2 URL × every HTTP method (actual routes from the URL resolver).
+"""V-ROUTE: every Phase 1, 2 and 3 URL × every HTTP method (actual routes from the URL resolver).
 
 Allowed methods must not return 405; every other method must return the documented
 405 envelope with an ``Allow`` header. Unknown or malformed URLs under /api/ must also
@@ -39,6 +39,13 @@ ROUTES = [
     ("student-ledger", "/api/v1/students/STU-000001/ledger/", {"GET"}),
     ("student-statement", "/api/v1/students/STU-000001/statement/", {"GET"}),
     ("student-balance", "/api/v1/students/STU-000001/balance/", {"GET"}),
+    # Phase 3: scholarships (no type/eligibility detail, no revoke; read + action only)
+    ("scholarship-types", "/api/v1/scholarship-types/", {"GET", "POST"}),
+    ("eligibility", "/api/v1/eligibility/", {"GET"}),
+    ("scholarships", "/api/v1/scholarships/", {"GET", "POST"}),
+    ("eligibility-checks", "/api/v1/scholarships/eligibility-checks/", {"POST"}),
+    ("scholarship", "/api/v1/scholarships/SCH-2026-000001/", {"GET"}),
+    ("scholarship-apply", "/api/v1/scholarships/SCH-2026-000001/apply/", {"POST"}),
 ]
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 DISALLOWED = [
@@ -76,7 +83,7 @@ def test_route_table_matches_resolver():
                 yield prefix + str(p.pattern)
 
     api = sorted(r for r in walk(get_resolver()) if r.startswith("api/v1/"))
-    assert len(api) == len(ROUTES) == 23  # Phase 1: 11, Phase 2: +12
+    assert len(api) == len(ROUTES) == 29  # Phase 1: 11, Phase 2: +12, Phase 3: +6
 
 
 @pytest.mark.parametrize(
@@ -113,6 +120,10 @@ def test_allowed_methods_are_not_405_and_options_works(world, name, path, allowe
         "/api/v1/students/STU-999999/ledger/",
         "/api/v1/billing/",
         "/api/v1/billing/late-fees/",
+        "/api/v1/scholarship-types/SCT-001/",  # no type detail route
+        "/api/v1/eligibility/ELG-2026-000001/",  # no eligibility detail route
+        "/api/v1/scholarships/sch-2026-000001/",
+        "/api/v1/scholarships/SCH-2026-000001/revoke/",  # D-S14: no revoke route
         "/api/v1/does-not-exist/",
         "/api/v2/students/",
     ],

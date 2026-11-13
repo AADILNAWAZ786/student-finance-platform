@@ -5,17 +5,22 @@ and reconcile student balances. Django 5.2 LTS + Django REST Framework + SQLite.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) (v1.1, frozen).
 
-**Status: Phase 2, billing** (on top of the verified Phase 1: students, programs, terms,
-enrollments). Phase 2 adds fee schedules with immutable versions, invoice generation with
-waivers, invoice amounts with collection and lifecycle statuses, void, late fees, the ledger
-(CHARGE, LATE_FEE, ADJUSTMENT) and the student ledger, statement and balance views.
-Scholarships, payments, refunds, withdrawals and reconciliation are not implemented yet, so
-`scholarship_applied`, `amount_paid` and their ledger types are always 0 / empty.
+**Status: Phase 3, scholarships** (on top of Phase 1: students, programs, terms, enrollments,
+and Phase 2: fee schedules, invoices, waivers, statuses, void, late fees, the ledger and the
+student ledger, statement and balance views). Phase 3 adds scholarship types, eligibility
+evaluations with reason codes, awards with per-term caps, exclusive groups and full-ride
+precedence, and application to invoice lines as append-only allocations posting
+SCHOLARSHIP_CREDIT / SCHOLARSHIP_REVERSAL ledger entries. Payments, refunds, withdrawals and
+reconciliation are not implemented yet, so `amount_paid` and payment/refund ledger types are
+always 0 / empty.
+
+Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
 
 **Unresolved design limitations:** learner "own record" and instructor "own programs" access
 (ARCHITECTURE §13) are **blocked**, because the frozen model has no login↔student or
 login↔program link. Learners currently have no access; instructors read programs and terms only.
-Billing data (Phase 2) is readable by `platform_admin` and `support_staff` only.
+Billing and scholarship data (Phases 2–3) is readable by `platform_admin` and `support_staff`
+only.
 See [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md).
 
 ## Quick start
@@ -74,26 +79,45 @@ Writes need `platform_admin`; reads `platform_admin` or `support_staff`. There i
 detail route, and no PUT, PATCH or DELETE on financial records. Fee schedules come from the
 API (or test fixtures); there is no seed command for them yet.
 
+### Scholarships API (Phase 3)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET, POST | `/api/v1/scholarship-types/` | types are immutable; `program_ids` required when `program_restricted` |
+| POST | `/api/v1/scholarships/eligibility-checks/` | `{student_id, term_id}` → one result per type; `evaluated_on` = the term's invoice date |
+| GET | `/api/v1/eligibility/` | every evaluation, eligible or not |
+| POST | `/api/v1/scholarships/` | `{eligibility_id, invoice_id, requested_amount?, award_date?}` → OFFERED |
+| POST | `/api/v1/scholarships/{id}/apply/` | `{allocated_on?}`; all-or-nothing; OFFERED → ACCEPTED → APPLIED |
+| GET | `/api/v1/scholarships/`, `/api/v1/scholarships/{id}/` | detail includes allocations and events |
+
+Same permissions as billing. Four separate money limits: the per-term cap on **awards**
+(BR-SCH-03), an award-stage reservation guardrail against the invoice's eligible fees, BR-SCH-04
+on **applied allocations**, and each line's remaining room. The 7 documented types
+(SCT-001…SCT-007) can be created with the opt-in command
+`python manage.py seed_scholarship_types` (idempotent; refuses if other types exist; never run
+automatically).
+
 ## Tests and quality
 
-Everything implemented so far (Phases 0, 1 and 2), including the runnable unit tests:
+Everything implemented so far (Phases 0–3), including the runnable unit tests:
 
 ```bash
 .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services \
     tests/api tests/commands tests/verification tests/workflow \
     tests/unit/test_invoice_status.py tests/unit/test_invoice_lifecycle.py \
-    tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py -rxX
-#   1410 passed, 2 xfailed (the two blocked rules)
+    tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py \
+    tests/unit/test_full_ride_scholarship.py tests/unit/test_scholarship_calculators.py -rxX
+#   1772 passed, 2 xfailed (the two blocked rules)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-The other six files in `tests/unit/` are acceptance tests for later phases (ARCHITECTURE §14).
+The other five files in `tests/unit/` are acceptance tests for later phases (ARCHITECTURE §14).
 They cannot be imported until their modules exist, so a bare `pytest` (all of `tests/`) stops
-at collection ("Interrupted: 6 errors during collection"). That is expected; use the command
+at collection ("Interrupted: 5 errors during collection"). That is expected; use the command
 above. To see their status:
 
 ```bash
-.venv/bin/python -m pytest --collect-only -q tests/unit/test_full_ride_scholarship.py \
+.venv/bin/python -m pytest --collect-only -q \
     tests/unit/test_payment_allocation.py tests/unit/test_withdrawal_refund_pct.py \
     tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py tests/unit/test_stage_rng.py
 ```
@@ -102,7 +126,8 @@ above. To see their status:
 ground-truth isolation, health outages, rollback, determinism, migration safety, concurrency,
 and every response validated against the OpenAPI schema. Results:
 [`docs/phase1_verification_results.txt`](docs/phase1_verification_results.txt),
-[`docs/phase2_verification_results.txt`](docs/phase2_verification_results.txt).
+[`docs/phase2_verification_results.txt`](docs/phase2_verification_results.txt),
+[`docs/phase3_verification_results.txt`](docs/phase3_verification_results.txt).
 
 ## Layout
 
@@ -111,11 +136,15 @@ config/          settings (two SQLite DBs), GroundTruthRouter, URLs
 core/            IDs, money (Decimal), domain errors + API error envelope, permissions,
                  SQLite system checks, IdSequence, StatusEventBase, health view
 students/ academics/   Phase 1 apps
-billing/         Phase 2: models, calculators (pure), lifecycle, policy, services, API
-scholarships/ payments/ reconciliation/ datagen/
-                 registered app skeletons; models arrive in Phases 3–7
+billing/         Phase 2: models, calculators (pure), lifecycle, policy, services, API;
+                 allocations.py = registry through which higher apps' allocations are seen
+scholarships/    Phase 3: models, calculators (pure), lifecycle, policy, services, API,
+                 seed_scholarship_types command
+payments/ reconciliation/ datagen/
+                 registered app skeletons; models arrive in Phases 4–7
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
-                 (Phases 1–2); workflow/ (§9.3 steps 1–3b); architecture/; unit/ (acceptance
-                 tests; 4 runnable now, 6 for later phases); billing_fixtures.py
+                 (Phases 1–3); workflow/ (§9.3 steps 1–5); architecture/; unit/ (acceptance
+                 tests; 6 runnable now, 5 for later phases); billing_fixtures.py,
+                 scholarship_fixtures.py
 docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results
 ```

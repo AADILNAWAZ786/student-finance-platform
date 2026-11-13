@@ -10,10 +10,12 @@ Every row is append-only except the two derived status columns on Invoice
 (``lifecycle_status`` and ``collection_status`` + ``collection_status_as_of``), which change
 only together with an InvoiceEvent.
 
-LedgerEntry is **staged** (Phase 2 decision D1): Phase 2 creates the ``invoice_line``
-source for CHARGE, LATE_FEE and ADJUSTMENT entries. The ``scholarship_allocation`` (Phase 3)
-and ``payment`` / ``refund`` (Phase 4) sources and their entry types are added by additive
-migrations, after which the table matches DATABASE_DESIGN.md exactly.
+LedgerEntry is **staged** (Phase 2 decision D1): Phase 2 created the ``invoice_line``
+source for CHARGE, LATE_FEE and ADJUSTMENT entries; Phase 3 added the
+``scholarship_allocation`` source for SCHOLARSHIP_CREDIT / SCHOLARSHIP_REVERSAL (migration
+0002). The ``payment`` / ``refund`` sources (Phase 4) follow the same way, after which the
+table matches DATABASE_DESIGN.md exactly. The scholarship FK is a string reference: billing
+never imports the scholarships app.
 ``tests/models/test_billing_schema_contract.py`` checks this against the design document.
 """
 
@@ -25,6 +27,8 @@ from core.ids import ID_MAX_LENGTHS, id_validator
 from core.models import StatusEventBase
 
 MONEY = {"max_digits": 12, "decimal_places": 2}
+LINE_ENTRY_TYPES = ["CHARGE", "LATE_FEE", "ADJUSTMENT"]
+SCHOLARSHIP_ENTRY_TYPES = ["SCHOLARSHIP_CREDIT", "SCHOLARSHIP_REVERSAL"]
 
 
 def _flag_matches(field: str, types) -> Q:
@@ -414,11 +418,13 @@ class LedgerEntry(models.Model):
     """Exactly one entry per source row (BR-LED-01). Staged: see the module docstring."""
 
     class EntryType(models.TextChoices):
-        # Phase 2 sources (invoice lines). SCHOLARSHIP_CREDIT / SCHOLARSHIP_REVERSAL arrive
-        # in Phase 3 and PAYMENT / REFUND in Phase 4, with their source FKs.
+        # invoice-line sources (Phase 2) and scholarship-allocation sources (Phase 3).
+        # PAYMENT / REFUND arrive in Phase 4 with their source FKs.
         CHARGE = "CHARGE"
         LATE_FEE = "LATE_FEE"
         ADJUSTMENT = "ADJUSTMENT"
+        SCHOLARSHIP_CREDIT = "SCHOLARSHIP_CREDIT"
+        SCHOLARSHIP_REVERSAL = "SCHOLARSHIP_REVERSAL"
 
     entry_id = models.CharField(
         max_length=ID_MAX_LENGTHS["ledger_entry"],
@@ -439,6 +445,13 @@ class LedgerEntry(models.Model):
         blank=True,
         related_name="ledger_entry",
     )
+    scholarship_allocation = models.OneToOneField(
+        "scholarships.ScholarshipAllocation",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ledger_entry",
+    )
     memo = models.CharField(max_length=120, null=True, blank=True)  # noqa: DJ001
     recorded_at = models.DateTimeField(auto_now_add=True)
 
@@ -446,20 +459,28 @@ class LedgerEntry(models.Model):
         ordering = ("entry_date", "entry_id")
         constraints = [
             models.CheckConstraint(
-                condition=Q(entry_type__in=["CHARGE", "LATE_FEE", "ADJUSTMENT"]),
+                condition=Q(entry_type__in=[*LINE_ENTRY_TYPES, *SCHOLARSHIP_ENTRY_TYPES]),
                 name="ledgerentry_entry_type_enum",
             ),
             models.CheckConstraint(
                 condition=(Q(entry_type="CHARGE") & Q(amount__gte=0))
                 | (Q(entry_type="LATE_FEE") & Q(amount__gt=0))
-                | (Q(entry_type="ADJUSTMENT") & Q(amount__lt=0)),
+                | (Q(entry_type="ADJUSTMENT") & Q(amount__lt=0))
+                | (Q(entry_type="SCHOLARSHIP_CREDIT") & Q(amount__lt=0))
+                | (Q(entry_type="SCHOLARSHIP_REVERSAL") & Q(amount__gt=0)),
                 name="ledgerentry_amount_sign_by_type",
             ),
-            # exactly one source FK, matching entry_type (Phase 2: only invoice_line exists)
+            # exactly one source FK, matching entry_type
             models.CheckConstraint(
-                condition=Q(
-                    entry_type__in=["CHARGE", "LATE_FEE", "ADJUSTMENT"],
-                    invoice_line__isnull=False,
+                condition=(
+                    Q(entry_type__in=LINE_ENTRY_TYPES)
+                    & Q(invoice_line__isnull=False)
+                    & Q(scholarship_allocation__isnull=True)
+                )
+                | (
+                    Q(entry_type__in=SCHOLARSHIP_ENTRY_TYPES)
+                    & Q(scholarship_allocation__isnull=False)
+                    & Q(invoice_line__isnull=True)
                 ),
                 name="ledgerentry_source_matches_type",
             ),

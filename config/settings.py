@@ -170,6 +170,8 @@ SPECTACULAR_SETTINGS = {
         "InvoiceLineFeeTypeEnum": "billing.models.InvoiceLine.FeeType",
         "StudentResidencyEnum": "students.models.Student.Residency",
         "FeeScheduleResidencyEnum": "billing.models.FeeSchedule.Residency",
+        # Phase 3: scholarship award status
+        "ScholarshipStatusEnum": "scholarships.models.Scholarship.Status",
     },
 }
 
