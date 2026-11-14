@@ -193,3 +193,10 @@ the services there (manual edits, deletions) could show gaps on first run.
 ----------------------------------
     db.sqlite3            131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f
     ground_truth.sqlite3  ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20
+
+POST-VERIFICATION PUBLICATION NOTE (added 2026-11-14, during Phase 9; the results above are
+unchanged)
+-------------------------------------------------------------------------------------------
+Branch phase6-reconciliation was later published to GitHub at
+efca9da10b56bdf578fc7af06adc00963ccee62d (the base of Phase 7). Its content is part of main
+through f31635f, whose tree equals the Phase 7 commit 87b5810.

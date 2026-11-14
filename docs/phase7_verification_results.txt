@@ -159,3 +159,11 @@ extended tests). Defects fixed before delivery: P7-B1, P7-B2.
 ----------------------------------
     db.sqlite3            131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f
     ground_truth.sqlite3  ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20
+
+POST-VERIFICATION PUBLICATION NOTE (added 2026-11-14, during Phase 9; the results above are
+unchanged)
+-------------------------------------------------------------------------------------------
+Branch phase7-datagen was later published to GitHub at 87b58105f685f1a01fc6e861529da448f07bcbbb.
+Its content reached main as f31635f ("Merge completed project phases 5 through 7"), a root
+commit whose tree is identical to 87b5810; the Phase 0-7 commit history is kept on the
+branch, not on main.

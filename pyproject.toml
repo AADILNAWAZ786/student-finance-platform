@@ -2,7 +2,7 @@
 name = "student-finance"
 version = "0.1.0"
 description = "YottaFlex challenge: tuition, scholarships, payments and balance reconciliation (Django + DRF + SQLite)"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.15"
 
 [tool.ruff]
 line-length = 100

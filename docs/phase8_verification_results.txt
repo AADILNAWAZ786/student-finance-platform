@@ -136,3 +136,15 @@ created).
   verify_export DIR                         (validation only; no import exists)
   verify_reproducibility [--seed N] [--scale ... | --scale-factor F] [--config PATH]
                          [--workdir DIR] [--keep]
+
+POST-VERIFICATION PUBLICATION NOTE (added 2026-11-14, during Phase 9; the results above are
+unchanged and describe the state when they were recorded)
+-------------------------------------------------------------------------------------------
+- Branch phase8-fullscale-tooling was published to GitHub with head b170720 and merged into
+  main through pull request #1: merge commit ac3759fa91f0e1027f2e4805d67e9bb57db696ed
+  (parents f31635f and b170720; its tree is identical to b170720). The statement above that
+  nothing was merged was true when it was written.
+- Correction to section 5: "No database file exists in the checkout after the work" was not
+  accurate. The empty db.sqlite3-wal (0 bytes) and db.sqlite3-shm side files from the P8-B5
+  incident stayed in the checkout; they were found and moved out at the start of Phase 9.
+  They held no data. The owner's databases were not involved (hashes unchanged).

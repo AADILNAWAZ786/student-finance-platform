@@ -24,7 +24,7 @@ import csv
 import json
 import os
 import platform
-import resource
+from datagen.platform_metrics import run_monitored
 import shutil
 import subprocess
 import sys
@@ -54,6 +54,7 @@ class RunInfo:
     combined_sha256: str | None = None
     files: int = 0
     rows: int = 0
+    peak_rss_mb: float = 0.0
 
 
 @dataclass
@@ -101,9 +102,8 @@ def _step(run: RunInfo, label: str, argv: list[str], env: dict[str, str]) -> str
     logs = run.root / "logs"
     logs.mkdir(exist_ok=True)
     t0 = time.monotonic()
-    proc = subprocess.run(
-        [sys.executable, *argv], cwd=REPO, env=env, capture_output=True, text=True, check=False
-    )
+    proc, peak_mb = run_monitored([sys.executable, *argv], cwd=REPO, env=env)
+    run.peak_rss_mb = max(run.peak_rss_mb, peak_mb)
     run.steps[label] = round(time.monotonic() - t0, 2)
     (logs / f"{label}.log").write_text(
         f"$ {' '.join(argv)}\n--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}",
@@ -310,7 +310,7 @@ def reproduce(
         run.root.mkdir()
         _one_run(run, args, config)
     diffs, compared = compare(runs[0].root / "export", runs[1].root / "export")
-    peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024  # KiB on Linux
+    peak = max((r.peak_rss_mb for r in runs), default=0.0)
     outcome = Outcome(
         workdir=root,
         report_path=root / "reproducibility_report.md",

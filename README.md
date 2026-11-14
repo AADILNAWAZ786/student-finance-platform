@@ -5,7 +5,12 @@ and reconcile student balances. Django 5.2 LTS + Django REST Framework + SQLite.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) (v1.1, frozen).
 
-**Status: Phase 8, full-scale tooling** (on top of Phase 1: students, programs, terms,
+**Status:** Phases 0–8 are implemented and merged into `main` (Phase 8 through pull request
+#1, merge commit `ac3759f`). **Phase 9 (demo workflow and documentation) is in progress** on
+branch `phase9-demo-documentation` and is not merged; see [Phase 9](#phase-9-in-progress) below
+and [`CHANGELOG.md`](CHANGELOG.md).
+
+What each phase built (on top of Phase 1: students, programs, terms,
 enrollments; Phase 2: fee schedules, invoices, waivers, statuses, void, late fees, the ledger
 and the student ledger, statement and balance views; Phase 3: scholarship types, eligibility,
 awards and their application). Phase 4 adds payments from any payer (each posting one PAYMENT
@@ -34,7 +39,8 @@ Phase 8 validates the full scale (10,000 students, about 1.25 million rows) and 
 export from its files alone; there is no import) and `verify_reproducibility` (the same seed in
 two isolated processes, compared file by file). Changes by phase: [`CHANGELOG.md`](CHANGELOG.md).
 
-Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
+Supported and tested: Python 3.12, 3.13 and 3.14 (full regression on 3.12.3, 3.13.18 and 3.14.6)
+with the pinned requirements (Django 5.2.19); `pyproject.toml` declares `>=3.12,<3.15`.
 
 **Unresolved design limitations:** learner "own record" and instructor "own programs" access
 (ARCHITECTURE §13) are **blocked**, because the frozen model has no login↔student or
@@ -101,7 +107,8 @@ py -3.12 -m venv .venv
 
 Writes need `platform_admin`; reads `platform_admin` or `support_staff`. There is no fee-schedule
 detail route, and no PUT, PATCH or DELETE on financial records. Fee schedules come from the
-API (or test fixtures); there is no seed command for them yet.
+API, from `generate_data` (Phase 7) or from test fixtures; there is no separate seed command for
+them.
 
 ### Scholarships API (Phase 3)
 
@@ -219,9 +226,34 @@ false) and a missing reconciliation run. Full scale on a 2-core, 8 GB machine: a
 to generate and reconcile, 2 minutes to export, peak memory about 4.4 GB; see
 [`docs/phase8_verification_results.txt`](docs/phase8_verification_results.txt).
 
+### Phase 9 (in progress)
+
+Committed on branch `phase9-demo-documentation` so far (not merged; under review):
+
+```bash
+# the complete workflow, end to end, in isolated temporary databases (never db.sqlite3)
+python manage.py demo_workflow                       # starter scale, writes output/demo/
+python manage.py demo_workflow --out output/demo-2 --keep
+python manage.py demo_workflow --scale full --out output/demo-full   # opt-in, long; runtime and memory measured in Phase 9 verification
+```
+
+`demo_workflow` refuses a non-empty `--out` and any database outside its own run directory. It
+writes `demo_report.md`, `api_transcript.json` (no tokens or headers), `demo_results.json` and
+the Phase 8 export, and exits non-zero if any stage fails.
+
+- [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md): every field of the eleven challenge entities.
+- [`BUSINESS_RULES.md`](BUSINESS_RULES.md): every business rule with its code and tests.
+- [`API.md`](API.md): all 64 operations, rendered from the OpenAPI schema, the demo's captured
+  requests and responses and its measured role table (`datagen/apidoc.py`).
+- [`docs/project_documentation_audit.md`](docs/project_documentation_audit.md): the
+  documentation and status audit.
+
+Still to come in Phase 9: `PROMPT.md`, the challenge acceptance matrix, a complete
+getting-started section and the Phase 9 verification results.
+
 ## Tests and quality
 
-Everything implemented so far (Phases 0–8), including every unit test:
+The full regression (every phase, including every unit test):
 
 ```bash
 .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services \
@@ -236,7 +268,9 @@ Everything implemented so far (Phases 0–8), including every unit test:
     tests/unit/test_reconciliation_counter_gaps.py tests/unit/test_stage_rng.py \
     tests/unit/test_evaluation_metrics.py tests/unit/test_datagen_config.py \
     tests/unit/test_generation_config_validation.py -rxX
-#   2698 passed, 3 skipped (opt-in full scale), 2 xfailed (the two blocked rules)
+#   Phase 8, main at ac3759f: 2698 passed, 3 skipped (opt-in full scale), 2 xfailed
+#   (the two blocked rules). The Phase 9 branch adds tests; its counts will be recorded in
+#   the Phase 9 verification results once verified.
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
@@ -282,12 +316,22 @@ datagen/         Phase 7: rng (stage_rng), config, pipeline/ (engine = the servi
                  validation), services (generate), evaluation, digest, API, generate_data and
                  evaluate commands; config/generation.yaml. Phase 8: config_schema, provenance,
                  export, verification, reproducibility; export_data, verify_export and
-                 verify_reproducibility commands
+                 verify_reproducibility commands. Phase 9: demo (demo_workflow command),
+                 apidoc (renders API.md)
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
                  (Phases 1–6); workflow/ (§9.3 steps 1–11, step 11 on fixtures); architecture/;
-                 unit/ (acceptance tests, all runnable); datagen/ (Phases 7–8); billing_fixtures.py,
+                 unit/ (acceptance tests, all runnable); datagen/ (Phases 7–9); architecture/
+                 also checks DATA_DICTIONARY.md and BUSINESS_RULES.md against the code;
+                 billing_fixtures.py,
                  scholarship_fixtures.py, payment_fixtures.py, reconciliation_fixtures.py (a clean
                  world built through the services, and a test-only anomaly injector),
                  datagen_replay.py (the parity replay through the services)
-docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results
+docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results,
+                 phase6_sv_coverage.md, project_documentation_audit.md
+README.md CHANGELOG.md DATA_DICTIONARY.md BUSINESS_RULES.md API.md   (repository root)
+output/          generated datasets and demo output (git-ignored)
 ```
+
+`DATA_DICTIONARY.md`, `BUSINESS_RULES.md`, `API.md` (and, when written, `PROMPT.md`) are
+at the repository root at the project owner's instruction; the frozen ARCHITECTURE §3 layout
+places them under `docs/`.
