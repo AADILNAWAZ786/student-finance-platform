@@ -2,7 +2,7 @@
 
     python manage.py demo_workflow                         # starter scale, output/demo
     python manage.py demo_workflow --out output/demo-2 --seed 20261022 --keep
-    python manage.py demo_workflow --scale full --out output/demo-full   # ~8 min, ~4.4 GB
+    python manage.py demo_workflow --scale full --out output/demo-full   # opt-in, long-running
 
 The configured databases are never opened: the command writes a settings module for two new
 SQLite files inside <out>/run/, checks it in a subprocess, and runs every stage there (generate,

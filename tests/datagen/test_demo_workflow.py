@@ -236,7 +236,8 @@ def test_a_failing_stage_exits_non_zero_and_is_reported(tmp_path):
 def test_full_scale_demo_gives_the_documented_ids(tmp_path):
     """ARCHITECTURE §9.3 documents the IDs on the full dataset (10,000 students, 30,000
     enrollments, 50,000 payments): STU-010001, ENR-2026-030001, INV-STU-010001-2026-000001,
-    PAY-2026-050001, ALLOC-PAY-2026-050001-01. About 8 minutes and 4.4 GB, sequential."""
+    PAY-2026-050001, ALLOC-PAY-2026-050001-01. Sequential; long-running (runtime and memory are
+    recorded when it is run)."""
     res = demo.run_demo(out=tmp_path / "full", seed=20261022, scale="full")
     c = res["E_api"]
     assert (c["student"], c["enrollment"], c["invoice"], c["payment"]) == (

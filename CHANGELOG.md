@@ -4,11 +4,30 @@ All notable changes to the Student Finance backend, by delivery phase. Design do
 (`docs/ARCHITECTURE.md`, `docs/DATABASE_DESIGN.md` v1.1) are frozen and unchanged throughout.
 Policy decisions, observations and defects of each phase are in
 [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md); per-phase test evidence is in
-`docs/phase*_verification_results.txt`.
+`docs/phase*_verification_results.txt`. Repository history: [below](#repository-history).
 
-## Phase 8: full-scale tooling (branch `phase8-fullscale-tooling`, not yet merged)
+## Phase 9: demo workflow and documentation (in progress, not merged)
 
-Base: `main` at `f31635f`. No migrations, no new dependency, no change to the frozen documents.
+Branch `phase9-demo-documentation`, created from `main` at `ac3759f` (Phase 8 merged). Under
+review; not merged into `main`. Committed so far:
+
+- `demo_workflow` command (`datagen/demo.py`): the complete workflow end to end in isolated
+  temporary SQLite databases (generation, export and `verify_export`, anomalies with their
+  labels, evaluation, the ARCHITECTURE §9.3 API scenario and its exception paths); refuses
+  any database outside its own run directory and a non-empty output directory.
+- `DATA_DICTIONARY.md` and `BUSINESS_RULES.md` at the repository root (owner's instruction;
+  ARCHITECTURE §3 lists them under `docs/`), each checked against the code by a test.
+- `docs/project_documentation_audit.md`: the documentation and status audit.
+
+Still to come in Phase 9: `API.md`, `PROMPT.md`, the acceptance matrix, the README
+getting-started section and the Phase 9 verification results.
+
+## Phase 8: full-scale tooling (merged into `main` through PR #1)
+
+Base: `main` at `f31635f`. Branch `phase8-fullscale-tooling`: six commits, `1e2d403` (step 1)
+… `b170720` (step 6). Merged into `main` through GitHub pull request #1, merge commit
+`ac3759f` (2026-11-14; parents `f31635f` and `b170720`; its tree is identical to `b170720`).
+No migrations, no new dependency, no change to the frozen documents.
 
 ### Added
 - `export_data` command (`datagen/export.py`): the ARCHITECTURE §11.4 layout:
@@ -90,3 +109,18 @@ Base: `main` at `f31635f`. No migrations, no new dependency, no change to the fr
 
 - Project skeleton: two SQLite databases with the ground-truth router, ID sequences, money
   as Decimal, domain errors and the API error envelope, permissions, health view, OpenAPI.
+
+## Repository history
+
+| Phase | Commit | Where |
+|---|---|---|
+| 0–2 | `a44abe4` | root of branch `phase7-datagen` |
+| 3 | `d8d90f2` | branch `phase7-datagen` |
+| 4 | `fb4c497` | branch `phase7-datagen` |
+| 5 | `d1bd07b` | branch `phase5-withdrawals` (and `phase7-datagen`) |
+| 6 | `efca9da` | branch `phase6-reconciliation` (and `phase7-datagen`) |
+| 7 | `87b5810` | branch `phase7-datagen` |
+| 0–7 on `main` | `f31635f` | "Merge completed project phases 5 through 7": a **root commit** (no parent) whose tree is identical to `87b5810`. `main` therefore holds the Phase 0–7 content but not its commit history, which is kept on the branches above. |
+| 8 | `1e2d403` … `b170720` | branch `phase8-fullscale-tooling`, based on `f31635f` |
+| 8 merged | `ac3759f` | `main`: merge of pull request #1 |
+| 9 | from `ac3759f` | branch `phase9-demo-documentation` (in progress, not merged) |

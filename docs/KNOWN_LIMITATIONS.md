@@ -1,7 +1,8 @@
 # Known limitations (unresolved) and Phase 2–8 policy decisions
 
-Status as of the Phase 8 (full-scale tooling) delivery (2026-11-14). L1 and L2 are **not
-implemented**.
+Status (2026-11-14): Phases 0–8 are merged into `main` (Phase 8 through pull request #1, merge
+commit `ac3759f`); Phase 9 is in progress on branch `phase9-demo-documentation`. L1 and L2 are
+**not implemented**.
 The frozen design documents (`ARCHITECTURE.md`, `DATABASE_DESIGN.md` v1.1) are unchanged;
 resolving L1/L2 needs a design decision by the project owner.
 
@@ -66,7 +67,7 @@ was not done in Phase 1.
 | P8-B2 | The ₹0.01 overpayment boundary case was planted once at every scale. | `datagen/pipeline/scenario.py`: planted `boundary_quota(f)` times. |
 | P8-B3 | Each withdrawal boundary day (0, 7, 8, 14, 15, 27, 28) was planted once at every scale. | `scenario.py`: planted `boundary_quota(f)` times each. |
 | P8-B4 | The first `schema.sql` ordered statements by name only, so some indexes preceded their tables and the file did not load. | `export.py`: tables first, then indexes. Found by the export tests; `verify_export` rejects such a file (`csv_sql`). |
-| P8-B5 | **Test safety.** The Phase 7 module fixtures (`tests/datagen/conftest.py`) unblock database access themselves; in a module without a `django_db` mark for both databases the test databases are never created, and the fixtures flushed and generated into the **configured** database paths. During Phase 8 development this created two empty files (no tables) at `<repo>/db.sqlite3` and `<repo>/ground_truth.sqlite3`; nothing existed there, the owner's databases (kept elsewhere) are unchanged, and the empty files were moved out of the checkout. | `_flush` now refuses unless every connection is its configured TEST database (`assert_test_databases`); `tests/datagen/test_fixture_guard.py`. |
+| P8-B5 | **Test safety.** The Phase 7 module fixtures (`tests/datagen/conftest.py`) unblock database access themselves; in a module without a `django_db` mark for both databases the test databases are never created, and the fixtures flushed and generated into the **configured** database paths. During Phase 8 development this created two empty files (no tables) at `<repo>/db.sqlite3` and `<repo>/ground_truth.sqlite3`; nothing existed there, the owner's databases (kept elsewhere) are unchanged, and the empty files were moved out of the checkout. | `_flush` now refuses unless every connection is its configured TEST database (`assert_test_databases`); `tests/datagen/test_fixture_guard.py`. *(Correction, Phase 9: the two side files of the empty `db.sqlite3`, `db.sqlite3-wal` (0 bytes) and `db.sqlite3-shm`, were not moved at the time and stayed in the checkout; they were found and moved out at the start of Phase 9. They held no data; nothing has opened that path since.)* |
 
 ## Phase 7 policy decisions (approved before implementation)
 
@@ -189,7 +190,7 @@ was not done in Phase 1.
 | # | Decision | Implemented as |
 |---|---|---|
 | D-P1 | `Payment.method` is Char(14) in the design but `SPONSOR_TRANSFER` has 16 characters | Char(16); see P4-O1. |
-| D-P2 | `docs/BUSINESS_RULES.md` does not exist | The rules are taken from ARCHITECTURE §6. No file created. |
+| D-P2 | `docs/BUSINESS_RULES.md` does not exist | The rules are taken from ARCHITECTURE §6. No file created. *(Later note, Phase 9: the catalogue now exists as `BUSINESS_RULES.md` at the repository root, at the owner's instruction.)* |
 | D-P3 | Who may request a refund | `POST /refunds/`: platform_admin and support_staff (§13). Approve / process / reject, payments and allocation: platform_admin only. Everyone else (learners included): 403. |
 | D-P4 | Billing needs payment and refund data without importing payments | Two student-level registry kinds in `billing/allocations.py`: `student_credit` (unallocated credit from the payment rows) and `refunds` (for statements). Payment / refund totals come from billing's own PAYMENT / REFUND ledger rows; the payer split from the `payment__payer_type` relation. |
 | D-P5 | `invoice_amounts` reads `payer_type` from allocations | Read-only `PaymentAllocation.payer_type` property (the payment's). No column. |
@@ -302,7 +303,7 @@ Phase 4 registered the LIFO deallocator (see the Phase 4 decisions above).
 | # | Defect | Fixed in |
 |---|---|---|
 | P3-B1 | `ScholarshipType.effective_from` / `effective_to` were not limited to 2026 business dates. | `create_scholarship_type` validates both with `check_business_date` (field-level 400, both reported together). |
-| P3-B2 | The API accepted `max_gpa = 0` (approved 0–4 bounds) but the DB CHECK required `max_gpa > 0`, so a valid request hit the database. | Model and `scholarships/0001_initial` (not yet merged) aligned to `0 ≤ max_gpa ≤ 4`. |
+| P3-B2 | The API accepted `max_gpa = 0` (approved 0–4 bounds) but the DB CHECK required `max_gpa > 0`, so a valid request hit the database. | Model and `scholarships/0001_initial` (not yet merged) aligned to `0 ≤ max_gpa ≤ 4`. *(Later note: "not yet merged" describes the Phase 3 review; the corrected migration shipped in the Phase 3 commit `d8d90f2`.)* |
 | P3-B3 | Found while proving P3-B2: the IntegrityError handler in `create_scholarship_type` relabelled **any** database error as "Only one ALL_FEE_LINES type may exist". | It now maps only the full-ride unique-index race to that 400 and re-raises everything else. |
 
 ## Phase 2 policy decisions (approved before implementation)
