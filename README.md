@@ -5,7 +5,7 @@ and reconcile student balances. Django 5.2 LTS + Django REST Framework + SQLite.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) (v1.1, frozen).
 
-**Status: Phase 7, data generation and evaluation** (on top of Phase 1: students, programs, terms,
+**Status: Phase 8, full-scale tooling** (on top of Phase 1: students, programs, terms,
 enrollments; Phase 2: fee schedules, invoices, waivers, statuses, void, late fees, the ledger
 and the student ledger, statement and balance views; Phase 3: scholarship types, eligibility,
 awards and their application). Phase 4 adds payments from any payer (each posting one PAYMENT
@@ -29,7 +29,10 @@ findings, without ever changing domain data. Phase 7 adds the synthetic data gen
 with the domain calculators (identical, row for row, to replaying the same operations through
 the services), injects the five required anomaly types with ground-truth labels kept in their
 own database, runs the blind detector and evaluates it (precision / recall / F1 per type).
-Full-scale volumes, exports, manifests and `verify_reproducibility` are Phase 8.
+Phase 8 validates the full scale (10,000 students, about 1.25 million rows) and adds
+`export_data` (CSV, JSON and SQL with checksummed manifests), `verify_export` (validation of an
+export from its files alone; there is no import) and `verify_reproducibility` (the same seed in
+two isolated processes, compared file by file). Changes by phase: [`CHANGELOG.md`](CHANGELOG.md).
 
 Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
 
@@ -186,9 +189,39 @@ each required type (labels in `ground_truth.sqlite3` only), runs the detector
 | GET | `/api/v1/datagen/runs/`, `/api/v1/datagen/runs/{id}/` | seed, scale, config hash, row counts, checksums (never labels) |
 | GET | `/api/v1/datagen/runs/{id}/evaluation/?reconciliation_run=` | precision / recall / F1 per type, consequential and unexpected findings (COMPLETED ALL-scope runs only) |
 
+### Full scale, export and verification (Phase 8)
+
+Run these against databases you can afford to regenerate. `generate_data` refuses non-empty
+databases; `verify_reproducibility` never opens the configured ones (it creates its own).
+
+```bash
+# generate (freshly migrated, empty databases), then export
+python manage.py generate_data --seed 20261022 --scale full          # or --scale-factor 0.05
+python manage.py export_data --out output/full                       # refuses a non-empty --out
+python manage.py verify_export output/full                           # files only; exit 1 on failure
+
+# the same seed twice, in two temporary isolated databases, compared byte for byte
+python manage.py verify_reproducibility --seed 20261022 --scale starter
+python manage.py verify_reproducibility --scale full --workdir /tmp/sf-repro-full --keep
+
+# an alternative generation config (validated; every problem is listed)
+python manage.py generate_data --config my_generation.yaml
+python manage.py export_data --out output/custom --config my_generation.yaml
+```
+
+`export_data` writes `dataset/{csv,json,sql}` (22 tables; `schema.sql` + `seed.sql` load into
+an empty SQLite file), `ground_truth/` (labels, kept apart from the dataset), `reports/`
+(`findings.csv`, `evaluation_report.json`, `validation_summary.md`), `source_manifest.json`,
+`dataset_manifest.json` (sha256 of every file and a combined digest; no timestamps) and
+`run_log.json` (times, host, git SHA: the only file that differs between identical runs). It
+refuses data changed after generation, a different config or code (the manifest would be
+false) and a missing reconciliation run. Full scale on a 2-core, 8 GB machine: about 3 minutes
+to generate and reconcile, 2 minutes to export, peak memory about 4.4 GB; see
+[`docs/phase8_verification_results.txt`](docs/phase8_verification_results.txt).
+
 ## Tests and quality
 
-Everything implemented so far (Phases 0–7), including every unit test:
+Everything implemented so far (Phases 0–8), including every unit test:
 
 ```bash
 .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services \
@@ -201,10 +234,14 @@ Everything implemented so far (Phases 0–7), including every unit test:
     tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py \
     tests/unit/test_reconciliation_checks.py tests/unit/test_reconciliation_sv_rules.py \
     tests/unit/test_reconciliation_counter_gaps.py tests/unit/test_stage_rng.py \
-    tests/unit/test_evaluation_metrics.py tests/unit/test_datagen_config.py -rxX
-#   2623 passed, 2 xfailed (the two blocked rules)
+    tests/unit/test_evaluation_metrics.py tests/unit/test_datagen_config.py \
+    tests/unit/test_generation_config_validation.py -rxX
+#   2698 passed, 3 skipped (opt-in full scale), 2 xfailed (the two blocked rules)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
+
+Full-scale tests are opt-in (about 12 minutes, up to ~4.4 GB): `SF_FULLSCALE=1 .venv/bin/python
+-m pytest tests/datagen/test_scales.py tests/datagen/test_fullscale.py`.
 
 `tests/unit/test_stage_rng.py`, the acceptance test for the data generator (ARCHITECTURE
 §14), now runs with the rest. Run the suite on one interpreter at a time: two concurrent runs
@@ -219,7 +256,8 @@ and every response validated against the OpenAPI schema. Results:
 [`docs/phase4_verification_results.txt`](docs/phase4_verification_results.txt),
 [`docs/phase5_verification_results.txt`](docs/phase5_verification_results.txt),
 [`docs/phase6_verification_results.txt`](docs/phase6_verification_results.txt),
-[`docs/phase7_verification_results.txt`](docs/phase7_verification_results.txt).
+[`docs/phase7_verification_results.txt`](docs/phase7_verification_results.txt),
+[`docs/phase8_verification_results.txt`](docs/phase8_verification_results.txt).
 
 ## Layout
 
@@ -242,10 +280,12 @@ reconciliation/  Phase 6: models, calculators (pure; reuse the domain calculator
 datagen/         Phase 7: rng (stage_rng), config, pipeline/ (engine = the services' steps on
                  in-memory records, scenario = stages 1–13, injector, materialize = stage 17,
                  validation), services (generate), evaluation, digest, API, generate_data and
-                 evaluate commands; config/generation.yaml
+                 evaluate commands; config/generation.yaml. Phase 8: config_schema, provenance,
+                 export, verification, reproducibility; export_data, verify_export and
+                 verify_reproducibility commands
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
                  (Phases 1–6); workflow/ (§9.3 steps 1–11, step 11 on fixtures); architecture/;
-                 unit/ (acceptance tests, all runnable); datagen/ (Phase 7); billing_fixtures.py,
+                 unit/ (acceptance tests, all runnable); datagen/ (Phases 7–8); billing_fixtures.py,
                  scholarship_fixtures.py, payment_fixtures.py, reconciliation_fixtures.py (a clean
                  world built through the services, and a test-only anomaly injector),
                  datagen_replay.py (the parity replay through the services)

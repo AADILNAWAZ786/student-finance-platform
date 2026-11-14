@@ -3,8 +3,9 @@
 Generates the dataset into the configured, fresh ``default`` and ``ground_truth`` databases
 (decision D-G6: refuses otherwise, no force option), then runs the blind reconciliation
 (stage 18, ``triggered_by = DATAGEN``) and the evaluation (stage 19). Same ``--seed`` + same
-scale + same config → the same data, labels and checksums. Phase 7 verifies the starter
-scale; full-scale volumes and timing are verified in Phase 8.
+scale + same config → the same data, labels and checksums. Verified at the starter
+scale (Phase 7) and every scale factor up to full (Phase 8). ``--config`` selects another
+generation config; ``config_hash`` identifies it.
 """
 
 import json
@@ -14,6 +15,7 @@ from django.core.management.base import BaseCommand, CommandError
 from datagen import services
 from datagen.config import DEFAULT_SEED, ConfigError
 from datagen.pipeline.engine import GenerationError
+from datagen.provenance import git_sha
 
 
 class Command(BaseCommand):
@@ -25,16 +27,23 @@ class Command(BaseCommand):
         scale.add_argument("--scale", choices=("starter", "full"), default=None)
         scale.add_argument("--scale-factor", default=None, help="e.g. 0.05 (0 < f ≤ 1)")
         parser.add_argument(
+            "--config",
+            default=None,
+            help="Generation config file (default config/generation.yaml).",
+        )
+        parser.add_argument(
             "--skip-reconciliation",
             action="store_true",
             help="Stop after writing the data (no reconciliation run, no evaluation).",
         )
 
-    def handle(self, *args, seed, scale, scale_factor, skip_reconciliation, **options):
+    def handle(self, *args, seed, scale, scale_factor, skip_reconciliation, config, **options):
         if scale is None and scale_factor is None:
             scale = "starter"
         try:
             result = services.generate(
+                config_path=config,
+                code_version=git_sha(),
                 seed=seed,
                 scale=scale,
                 scale_factor=scale_factor,

@@ -188,6 +188,22 @@ def compute(
     }
 
 
+def labels_of(generation_run_id: str):
+    """The label rows of one generation run, as ``(model, using, queryset)`` for the exporter
+    (Phase 8): the label model stays named only where labels are written or evaluated."""
+    from datagen.models import GroundTruthLabel
+
+    qs = GroundTruthLabel.objects.using("ground_truth").filter(generation_run_id=generation_run_id)
+    return GroundTruthLabel, "ground_truth", qs
+
+
+def findings_of(reconciliation_run_id: str):
+    """The finding rows of one reconciliation run, as ``(model, using, queryset)``."""
+    from reconciliation.models import AnomalyFinding
+
+    return AnomalyFinding, "default", AnomalyFinding.objects.filter(run_id=reconciliation_run_id)
+
+
 def evaluate(*, generation_run_id: str, reconciliation_run_id: str) -> dict:
     """Evaluate a stored reconciliation run against a generation run's labels."""
     from datagen.models import GenerationRun, GroundTruthLabel
