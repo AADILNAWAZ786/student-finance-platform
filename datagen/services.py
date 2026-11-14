@@ -89,9 +89,14 @@ def plan(
     scale_factor=None,
     inject: bool = True,
     run_id: str = "GEN-2026-0001",
+    config_path=None,
 ) -> Plan:
-    """Stages 1–17 in memory. ``inject=False`` builds the baseline only (tests)."""
-    settings = Settings(seed=int(seed), resolved=resolve(scale=scale, scale_factor=scale_factor))
+    """Stages 1–17 in memory. ``inject=False`` builds the baseline only (tests).
+    ``config_path``: another generation config (default ``config/generation.yaml``)."""
+    settings = Settings(
+        seed=int(seed),
+        resolved=resolve(scale=scale, scale_factor=scale_factor, path=config_path),
+    )
     scenario = Scenario(settings)
     world = scenario.run()  # stages 1–13
     report = validate(world, scenario.stats, settings.counts, settings.dec("scale_factor"))
@@ -180,11 +185,19 @@ def generate(
     reconcile: bool = True,
     inject: bool = True,
     code_version: str | None = None,
+    config_path=None,
 ) -> GenerationResult:
     ensure_fresh()
     started = timezone.now()
     run_id = "GEN-2026-0001"  # the first run of a fresh database (D-G6); confirmed below
-    p = plan(seed=seed, scale=scale, scale_factor=scale_factor, run_id=run_id, inject=inject)
+    p = plan(
+        seed=seed,
+        scale=scale,
+        scale_factor=scale_factor,
+        run_id=run_id,
+        inject=inject,
+        config_path=config_path,
+    )
     with transaction.atomic(using="default"):
         assigned = next_id("generation_run", year=AS_OF.year)
         if assigned != run_id:  # unreachable on a fresh database
