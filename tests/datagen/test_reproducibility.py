@@ -85,6 +85,8 @@ def test_starter_is_reproducible_across_processes(tmp_path):
     report = outcome.report_path.read_text()
     assert "Result: **REPRODUCIBLE**" in report and "Excluded: `run_log.json`" in report
     assert "| run_a | 1 |" in report and "| run_b | 2 |" in report  # different hash seeds
+    table = [line for line in report.splitlines() if line.startswith("|")]
+    assert len({line.count("|") for line in table}) == 1  # header and rows have equal columns
     assert sorted(p.name for p in work.iterdir()) == ["reproducibility_report.md"]  # cleaned
 
 

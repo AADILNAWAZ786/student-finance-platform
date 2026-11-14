@@ -238,8 +238,9 @@ def _report(outcome: Outcome, params: dict) -> str:
         "",
         "## Runs (sequential, isolated databases)",
         "",
-        "| run | combined_sha256 | files | dataset rows | migrate s | generate s | export s |",
-        "|---|---|---|---|---|---|---|",
+        "| run | PYTHONHASHSEED | combined_sha256 | files | dataset rows | migrate s "
+        "| generate s | export s |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for r in outcome.runs:
         migrate = round(
