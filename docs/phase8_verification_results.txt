@@ -1,0 +1,138 @@
+Phase 8 (full-scale tooling): verification results
+===================================================
+Date: 2026-11-14. Every result below was produced by running the real project.
+Base: main at f31635fa55d5ef86d5c8d6cebeb9f2af3dd6d6a6 (tree equal to Phase 7 commit 87b5810).
+Work branch: phase8-fullscale-tooling, created from f31635f. Commits: 1e2d403 (step 1),
+bf0f48b (step 2), fda5c96 (step 3), 4d7ef4b (step 4), 408a450 (step 5), then the step 6
+commit carrying this file. main and the Phase 5-7 branches are untouched; nothing merged.
+Approved plan: P8-D1 ... P8-D9 and the owner's ten conditions (docs/KNOWN_LIMITATIONS.md,
+"Phase 8 policy decisions").
+
+Environments (sequential runs only; never two at once):
+  Python 3.14.6 and Python 3.12.3, pinned requirements.txt (Django 5.2.19, DRF 3.18.3,
+  drf-spectacular 0.30.0, pytest 9.2.0, pytest-django 4.14.0, ruff 0.17.4), SQLite 3.53.1.
+  Machine: 2 cores, 7.8 GB RAM (Linux).
+
+1. Frozen documents, migrations, API
+------------------------------------
+docs/ARCHITECTURE.md    sha256 10b72a7f58150d2789ff45924938cba0c0886301b90e845d2f6863877d4d6d55
+docs/DATABASE_DESIGN.md sha256 6bfbf704fcb1e0091f44b3244aa62b96dc48299af81691b1a500ca15106caf38
+  Both identical to f31635f (git diff: 0 lines).
+Migration files changed since f31635f: 0. makemigrations --check --dry-run: "No changes
+detected", exit 0 (both interpreters).
+OpenAPI: spectacular --validate --fail-on-warn exit 0 on both interpreters; the generated
+schema is byte-identical on 3.14.6 and 3.12.3 and byte-identical to the schema generated from
+a worktree of f31635f (Phase 8 adds no endpoint).
+manage.py check: "System check identified no issues (0 silenced)" on both.
+Gates and the f31635f comparison ran with a scratch settings module whose databases are in
+/tmp, so no database file was created in the checkout.
+
+2. Goldens (seed 20261022, starter)
+-----------------------------------
+Phase 7, unchanged (tests/datagen/test_determinism.py, passing on both interpreters):
+  dataset c02689f549860eb8f886011f899804a71abecc481d8df0e7ebb02a6eead7b7e3
+  labels  160a7733fabff5d708aa3c71abed5b032991a642411b5fe2d643670a14ab4010
+  config  acbe9c9ab9503071421c568056828ab666b77ad1b5c2474ff47fc8e0fd0a45c6
+Phase 8, new (tests/datagen/test_export.py, test_reproducibility.py):
+  starter export combined_sha256 229335b44f7f8d96056e2e5ec60af4e2e9fb64191c4ce732af32e02cee578db1
+  52 checksummed files, 13,095 dataset rows, 15 labels, 18 findings.
+
+3. Full regression (the README command plus tests/unit/test_generation_config_validation.py)
+------------------------------------------------------------------------------------------
+Python 3.14.6:  2698 passed, 3 skipped, 2 xfailed in 329.13s (0:05:29)
+Python 3.12.3:  2698 passed, 3 skipped, 2 xfailed in 330.27s (0:05:30)
+  Phase 7 delivery: 2623 passed, 2 xfailed. +75 Phase 8 tests in the regression.
+  XFAIL (expected, unchanged, strict):
+    tests/verification/test_verify_security.py::test_design_learner_reads_own_record
+    tests/verification/test_verify_security.py::test_design_instructor_reads_enrollments_of_own_program
+  SKIPPED (opt-in, SF_FULLSCALE=1): test_scales.py full/half (2), test_fullscale.py (1).
+ruff check .: "All checks passed!"   ruff format --check .: "292 files already formatted"
+
+Phase 8 tests (78 collected; 75 in the regression, 3 opt-in):
+  tests/unit/test_generation_config_validation.py   24  config schema problems with paths
+  tests/datagen/test_config_command.py                2  invalid config writes nothing; alt config hash
+  tests/datagen/test_scales.py                       11  boundary quota, factors 0.02-0.25 (9); 0.5/1.0 opt-in (2)
+  tests/datagen/test_export.py                       13  layout, hashes, formats, LF, labels apart,
+                                                         SQL load + foreign_key_check, byte-identical
+                                                         re-export, refusals
+  tests/datagen/test_export_without_runs.py           1  no generation run / no reconciliation run
+  tests/datagen/test_verify_export.py                16  clean pass; 12 tamper cases; no DB query
+  tests/datagen/test_reproducibility.py               7  comparison, real two-process starter run,
+                                                         forced mismatch, isolation refusal
+  tests/datagen/test_fixture_guard.py                 3  fixtures refuse non-test databases (P8-B5)
+  tests/datagen/test_fullscale.py                     1  opt-in: full-scale reproducibility + verify
+
+Opt-in, Python 3.14.6:
+  SF_FULLSCALE=1 pytest tests/datagen/test_scales.py      11 passed in 91.09s
+  SF_FULLSCALE=1 pytest tests/datagen/test_fullscale.py    1 passed in 677.97s (0:11:17)
+
+4. Full scale (seed 20261022, --scale full), test_fullscale.py
+--------------------------------------------------------------
+verify_reproducibility: two sequential subprocess runs, each with its own settings module and
+fresh SQLite files in a pytest temporary directory (never the configured databases).
+
+| run   | PYTHONHASHSEED | combined_sha256                                                  | files | dataset rows | migrate s | generate s | export s |
+|-------|----------------|------------------------------------------------------------------|-------|--------------|-----------|------------|----------|
+| run_a | 1              | e24d6068a99e9731a9059b07b1878fb0854cf2e3d5273b62b5eafe71ae1e3175 | 52    | 1254719      | 2.29      | 178.82     | 130.21   |
+| run_b | 2              | e24d6068a99e9731a9059b07b1878fb0854cf2e3d5273b62b5eafe71ae1e3175 | 52    | 1254719      | 2.47      | 181.01     | 134.13   |
+
+Result: REPRODUCIBLE. 53 files compared by sha256 (every export file except run_log.json),
+all byte-identical. (The header of the report written by this run lacked the PYTHONHASHSEED
+column while its rows had it; the header was fixed afterwards and a test now checks that the
+header and rows have the same number of columns. No value changed.)
+"generate s" includes the DATAGEN reconciliation run (run_a: generation 114 s, reconciliation
+56 s, from run_log.json). Export run_a step times: preflight 79.4 s (in-memory re-plan for the
+code-drift check, P8-O3), CSV + JSON 32.9 s, SQL 14.3 s, ground truth + reports 0.1 s.
+Export size 1.1 GB; the two databases 420 MB.
+verify_export on run_a's export: all 10 checks PASS, 22 tables, 1,254,719 rows, 46.5 s.
+Peak RSS: a child process (generation) 4,365 MB; the verifying test process 1,198 MB.
+
+Detection (generate_data, run_a): every required type TP=150 FP=0 FN=0, P=R=F1=1.0000;
+consequential=150, unexpected=0, non-anomalous students reconciled 100.00 %, meets_targets=True.
+Labels 750 (5 x 150); findings 900 (750 + 150 consequential).
+
+Row counts (dataset_manifest.json):
+  academics_program 20, academics_term 12, scholarships_scholarshiptype 7,
+  scholarships_scholarshiptypeprogram 8, students_student 10000, students_studentstatusevent 10500,
+  academics_enrollment 30000, academics_enrollmentevent 60000, billing_feeschedule 466,
+  billing_invoice 30150, billing_invoiceline 179285, billing_invoiceevent 108222,
+  billing_ledgerentry 248871, scholarships_eligibility 210000, scholarships_scholarship 15150,
+  scholarships_scholarshipallocation 17780, scholarships_scholarshipevent 45803,
+  payments_payment 50000, payments_paymentallocation 191176, payments_refund 1818,
+  payments_refundevent 5451, reconciliation_balancesnapshot 40000.
+  Every DATABASE_DESIGN §7 exact volume holds (baseline programs 20, terms 12, types 7 / 8,
+  students 10,000, enrollments 30,000, invoices 30,000 + 150, eligibility 210,000,
+  scholarships 15,000 + 150, payments 50,000, snapshots 40,000).
+
+validation_summary.md (full): Result PASSED. Bands: partial payments 49.82 % (>= 20),
+overpayments 3.50 % (2-5), guardian 20.00 % (15-25), sponsor 10.00 % (5-15), waived 7.00 %
+(5-10), withdrawals 5.00 % (3-8), cancellations 1.00 % (0.5-1.5), late fees 10.68 % (8-15);
+full-ride awards 450 (300-600); scholarship-covered invoices 450 (>= 300).
+Boundary cases (minimum 5 each): cancellation_registration_owed 266,
+full_ride_covers_registration 450, fully_waived_line 617, late_fee_maximum 147,
+late_fee_minimum 951, overpayment_one_paisa 5, payment_equals_outstanding 26727,
+scholarship_at_cap 1803, withdrawal_day_0 39, _7 27, _8 26, _14 32, _15 28, _27 30, _28 34.
+
+5. Database safety
+------------------
+The owner's databases (kept outside the checkout):
+  before Phase 8: db.sqlite3           131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f
+                  ground_truth.sqlite3 ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20
+  after Phase 8:  identical hashes; files last modified 2026-11-12 (before this phase).
+Every generation, export, verification and reproducibility run used temporary SQLite files
+(pytest test databases, /tmp scratch settings, or verify_reproducibility's own run
+directories). No database file exists in the checkout after the work.
+Incident (P8-B5): during step 5 development an unmarked test module made the Phase 7 fixtures
+open the configured paths in the checkout; SQLite created two empty files (0 tables) there.
+Nothing existed at those paths, the owner's databases were not involved, and the empty files
+were moved out of the checkout. The fixtures now refuse anything but the test databases
+(tests/datagen/test_fixture_guard.py; also probed with an unmarked module: refused, no file
+created).
+
+6. Commands, as delivered
+-------------------------
+  generate_data [--seed N] [--scale starter|full | --scale-factor F] [--config PATH]
+  export_data [--out DIR] [--config PATH] [--reconciliation-run RECON-...]
+  verify_export DIR                         (validation only; no import exists)
+  verify_reproducibility [--seed N] [--scale ... | --scale-factor F] [--config PATH]
+                         [--workdir DIR] [--keep]

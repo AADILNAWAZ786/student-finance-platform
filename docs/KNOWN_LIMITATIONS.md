@@ -1,6 +1,6 @@
-# Known limitations (unresolved) and Phase 2–7 policy decisions
+# Known limitations (unresolved) and Phase 2–8 policy decisions
 
-Status as of the Phase 7 (data generation and evaluation) delivery (2026-11-14). L1 and L2 are **not
+Status as of the Phase 8 (full-scale tooling) delivery (2026-11-14). L1 and L2 are **not
 implemented**.
 The frozen design documents (`ARCHITECTURE.md`, `DATABASE_DESIGN.md` v1.1) are unchanged;
 resolving L1/L2 needs a design decision by the project owner.
@@ -31,6 +31,42 @@ resolving L1/L2 needs a design decision by the project owner.
 **Resolving L1 and L2** needs a model addition, for example an optional one-to-one
 `Student.user` and an instructor↔program bridge table. That changes the frozen design, so it
 was not done in Phase 1.
+
+## Phase 8 policy decisions (approved before implementation)
+
+| # | Decision | Implemented as |
+|---|---|---|
+| P8-D1 | Fix the full-scale boundary defects, keeping the starter goldens | P8-B1 to P8-B3 below; `boundary_quota(f) = max(1, round(5 × f))` equals the Phase 7 behaviour at the starter factor, so the dataset, label and config checksums are unchanged (pinned tests). |
+| P8-D2 | `export_data` with the ARCHITECTURE §11.4 layout | `datagen/export.py`. 22 dataset tables (the materialized models minus `IdSequence`, an internal counter) as CSV, JSON and SQL in primary-key order, LF only; `ground_truth/`, `reports/`, `source_manifest.json`, `dataset_manifest.json`, `run_log.json`. Written to a temporary sibling directory and moved into place only when complete. |
+| P8-D3 | Export safety preflight | Refuses: no or several generation runs; data changed since generation (lists the tables whose checksum changed); a config whose hash differs (`--config` names the original); code drift (a fresh in-memory re-plan gives different checksums); a changed label checksum; no COMPLETED ALL-scope reconciliation run as of 2026-12-31; a non-empty output directory. |
+| P8-D4 | `verify_reproducibility` | Two sequential subprocess runs with generated settings modules and fresh SQLite files under the work directory; a settings probe refuses database paths outside the run directory or already existing, before migrating; `PYTHONHASHSEED` 1 and 2. Compares every export file except `run_log.json`. |
+| P8-D5 | `verify_export`, validation only, **no database import** | `datagen/verification.py`. Ten checks (manifest, files, row_counts, csv_json, csv_sql, ids, foreign_keys, labels, separation, reports). SQL is loaded into a temporary SQLite file only; no query reaches a Django database (tested). |
+| P8-D6 | Config validation and `--config` | `datagen/config_schema.py`; every problem listed with its path; `generate_data --config`, recorded through `config_hash`. |
+| P8-D7 | Full-scale database tests are opt-in | `SF_FULLSCALE=1` (`tests/datagen/test_scales.py`, `tests/datagen/test_fullscale.py`); sequential, in temporary databases. |
+| P8-D8 | `code_version` = git SHA | `datagen/provenance.py`; stored in `GenerationRun.code_version`, reported in `run_log.json` and the reproducibility report, never checksummed. |
+| P8-D9 | Documentation | `CHANGELOG.md`, `docs/phase8_verification_results.txt`, this section, README. |
+
+## Phase 8 observations
+
+| # | Observation | Current behaviour |
+|---|---|---|
+| P8-O1 | The exported `schema.sql` omits `recorded_at` | `recorded_at` is execution metadata excluded from every checksum (D-G2, P7-O5) and from the exported rows; it is `NOT NULL` without a database default, so `seed.sql` could not load if the column stayed. The exported schema is therefore the dataset's schema, not a byte copy of the Django tables; tables come first, then their indexes. |
+| P8-O2 | What "deterministic" covers | Every export file but `run_log.json`: dataset files, ground truth, reports, `source_manifest.json` and `dataset_manifest.json` (byte for byte; it has no timestamps, host, path or git SHA). Generation and reconciliation run IDs are part of it; they are deterministic because generation requires fresh databases (D-G6). Starter export golden: `combined_sha256 = 229335b4…8db1` on Python 3.14.6 and 3.12.3. |
+| P8-O3 | Preflight cost at full scale | The code-drift check re-plans the dataset in memory and compares checksums: about 80 s of a 127 s full-scale export on a 2-core machine. Accepted: it is what proves the manifest describes this code and config. |
+| P8-O4 | `verify_export` memory | It holds the primary keys of all tables (for foreign keys and label references) and one table's CSV and JSON rows at a time. Measured at full scale in `docs/phase8_verification_results.txt`. |
+| P8-O5 | `run_log.json` paths | `output` is the resolved path, so through a symlinked directory it names the real one. |
+| P8-O6 | `code_version` does not record a dirty working tree | It is `git rev-parse HEAD`; uncommitted changes are not detected. The export's code-drift check (P8-D3) is what guarantees that the exporting code reproduces the data. |
+| P8-O7 | No import command | As instructed, there is no `import_data`. `schema.sql` + `seed.sql` can be loaded into a new SQLite file by hand for inspection; they are not a migration path into the application database. |
+
+## Defects found and fixed during Phase 8 implementation (before delivery)
+
+| # | Defect | Fixed in |
+|---|---|---|
+| P8-B1 | At scale factors ≥ 0.5 the Phase 7 validation rejected its own dataset: the late-fee minimum and maximum boundary cases were counted once if present (the delivered full-scale dataset has 951 and 147), against a scaled minimum. | `datagen/pipeline/validation.py`: counted per occurrence. |
+| P8-B2 | The ₹0.01 overpayment boundary case was planted once at every scale. | `datagen/pipeline/scenario.py`: planted `boundary_quota(f)` times. |
+| P8-B3 | Each withdrawal boundary day (0, 7, 8, 14, 15, 27, 28) was planted once at every scale. | `scenario.py`: planted `boundary_quota(f)` times each. |
+| P8-B4 | The first `schema.sql` ordered statements by name only, so some indexes preceded their tables and the file did not load. | `export.py`: tables first, then indexes. Found by the export tests; `verify_export` rejects such a file (`csv_sql`). |
+| P8-B5 | **Test safety.** The Phase 7 module fixtures (`tests/datagen/conftest.py`) unblock database access themselves; in a module without a `django_db` mark for both databases the test databases are never created, and the fixtures flushed and generated into the **configured** database paths. During Phase 8 development this created two empty files (no tables) at `<repo>/db.sqlite3` and `<repo>/ground_truth.sqlite3`; nothing existed there, the owner's databases (kept elsewhere) are unchanged, and the empty files were moved out of the checkout. | `_flush` now refuses unless every connection is its configured TEST database (`assert_test_databases`); `tests/datagen/test_fixture_guard.py`. |
 
 ## Phase 7 policy decisions (approved before implementation)
 
