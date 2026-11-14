@@ -5,7 +5,10 @@ configured databases), then verify_export on the kept export of the first run.""
 
 import json
 import os
-import resource
+try:
+    import resource
+except ImportError:  # Windows does not provide the resource module.
+    resource = None
 import time
 
 import pytest
@@ -46,9 +49,18 @@ def test_full_scale_is_reproducible_and_its_export_verifies(tmp_path):
     assert report.ok, report.lines()
     for run in outcome.runs:  # recorded in docs/phase8_verification_results.txt
         print(f"{run.name}: {run.combined_sha256} rows={run.rows} steps={run.steps}")
-    self_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
     print(f"verify_export: {verify_s:.1f}s, {report.tables} tables, {report.rows} rows")
-    print(f"peak RSS: child {outcome.peak_rss_mb:.0f} MB, verifier process {self_mb:.0f} MB")
+    if resource is None:
+        print(
+            f"peak RSS: child {outcome.peak_rss_mb:.0f} MB; "
+            "verifier process measurement unavailable on this platform"
+        )
+    else:
+        self_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        print(
+            f"peak RSS: child {outcome.peak_rss_mb:.0f} MB, "
+            f"verifier process {self_mb:.0f} MB"
+        )
 
     manifest = json.loads((work / "run_a/export/dataset_manifest.json").read_text())
     for table, n in EXACT.items():
