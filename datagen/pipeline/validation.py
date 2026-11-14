@@ -33,6 +33,12 @@ BOUNDARY_CASES = (
 )
 
 
+def boundary_quota(factor: Decimal) -> int:
+    """Each boundary case must occur at least 5 times at full scale, scaled, never below 1
+    (ARCHITECTURE §11.2, DATABASE_DESIGN §7). The scenario plants this many where it plants."""
+    return _scaled(5, factor)
+
+
 def _scaled(n, factor: Decimal) -> int:
     return max(1, int((Decimal(n) * factor).quantize(Decimal(1), rounding=ROUND_HALF_UP)))
 
@@ -59,10 +65,9 @@ def validate(world, stats, counts: dict, factor: Decimal) -> dict:
     n_inv, n_enr, n_pay = len(invoices), len(w.enrollments), len(w.payments)
 
     late = [x for x in w.lines if x.line_type == "LATE_FEE"]
-    if any(x.net_amount == Decimal("500.00") for x in late):
-        stats.hit("late_fee_minimum")
-    if any(x.net_amount == Decimal("5000.00") for x in late):
-        stats.hit("late_fee_maximum")
+    # every occurrence counts (Phase 8 fix P8-B1: counted once before, so full scale failed)
+    stats.boundary["late_fee_minimum"] = sum(1 for x in late if x.net_amount == Decimal("500.00"))
+    stats.boundary["late_fee_maximum"] = sum(1 for x in late if x.net_amount == Decimal("5000.00"))
 
     exact = {
         "programs": (len(w.programs), 20),
@@ -111,7 +116,7 @@ def validate(world, stats, counts: dict, factor: Decimal) -> dict:
         "full_ride_awards": (full_ride, _scaled(300, factor), _scaled(600, factor)),
         "scholarship_covered_invoices": (covered, _scaled(300, factor), None),
     }
-    boundary_min = _scaled(5, factor)
+    boundary_min = boundary_quota(factor)
     problems = []
     for name, (actual, expected) in exact.items():
         if actual != expected:

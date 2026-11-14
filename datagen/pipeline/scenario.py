@@ -21,6 +21,7 @@ from academics.calendar import standard_calendar
 from core.money import round_money
 from datagen.config import Settings
 from datagen.pipeline.engine import GenerationError, World
+from datagen.pipeline.validation import boundary_quota
 from datagen.rng import beta_integer, choose, sample, shuffled, stage_rng, truncated_normal
 from scholarships import policy as spolicy
 from scholarships.management.commands.seed_scholarship_types import FROM as TYPES_FROM
@@ -440,9 +441,11 @@ class Scenario:
             quota(conf["overpayment_invoice_share"], n_invoices),
         )
         extra = {}
+        planted = boundary_quota(self.s.dec("scale_factor"))
         lo_x, hi_x = conf["overpay_extra"]
         for rank, key in enumerate(over):
-            extra[key] = Decimal("0.01") if rank == 0 else Decimal(rng.randint(lo_x, hi_x))
+            # the first k by ₹0.01: the boundary case, planted k = boundary_quota times (P8-B2)
+            extra[key] = Decimal("0.01") if rank < planted else Decimal(rng.randint(lo_x, hi_x))
         refund_share = Decimal(self.s.get("refunds", "overpayment_refund_share"))
         refunded = set(sample(self.rng("refunds"), over, quota(refund_share, len(over))))
         self.stats.overpayment_slots = len(over)
@@ -557,10 +560,15 @@ class Scenario:
         chosen = sample(rng, slots, n_w + n_c)
         withdrawals, cancellations = chosen[:n_w], chosen[n_w:]
         boundary = list(conf["boundary_days"])
+        planted = boundary_quota(self.s.dec("scale_factor"))
         for rank, (term_id, student) in enumerate(withdrawals):
             term = self.w.terms[term_id]
             longest = min(conf["max_withdrawal_day"], (term.end_date - term.start_date).days)
-            day = boundary[rank] if rank < len(boundary) else rng.randint(0, longest)
+            # every boundary day planted k = boundary_quota times, in order (P8-B3)
+            if rank < len(boundary) * planted:
+                day = boundary[rank % len(boundary)]
+            else:
+                day = rng.randint(0, longest)
             on = term.start_date + timedelta(days=day)
             self.timeline.add(
                 on,
