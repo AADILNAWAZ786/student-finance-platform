@@ -39,7 +39,8 @@ Phase 8 validates the full scale (10,000 students, about 1.25 million rows) and 
 export from its files alone; there is no import) and `verify_reproducibility` (the same seed in
 two isolated processes, compared file by file). Changes by phase: [`CHANGELOG.md`](CHANGELOG.md).
 
-Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
+Supported and tested: Python 3.12, 3.13 and 3.14 (full regression on 3.12.3, 3.13.18 and 3.14.6)
+with the pinned requirements (Django 5.2.19); `pyproject.toml` declares `>=3.12,<3.15`.
 
 **Unresolved design limitations:** learner "own record" and instructor "own programs" access
 (ARCHITECTURE §13) are **blocked**, because the frozen model has no login↔student or

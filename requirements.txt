@@ -1,4 +1,5 @@
-# Student Finance Backend: pinned dependencies (Python 3.12).
+# Student Finance Backend: pinned dependencies (Python 3.12-3.14; verified on 3.12.3, 3.13.18
+# and 3.14.6).
 # Install: python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 # Direct dependencies are listed first; transitive dependencies are pinned below
 # so every install resolves to exactly the same set (reproducibility, ARCHITECTURE §11).
