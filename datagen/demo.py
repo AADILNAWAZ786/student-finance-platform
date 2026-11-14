@@ -54,6 +54,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from datagen import reproducibility as rp
+from datagen.platform_metrics import ProcessPeakRSS
 
 REPO = rp.REPO
 MARKER = "SF_DEMO_ISOLATED"
@@ -146,17 +147,17 @@ def run_demo(
     proc = subprocess.Popen(  # noqa: S603 - our own manage.py with our own arguments
         argv, cwd=REPO, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
+    memory_monitor = ProcessPeakRSS(proc.pid).start()
     lines = []
     for line in proc.stdout:
         lines.append(line)
         if stream is not None:
             stream.write(line)
     proc.wait()
+    peak_mb = memory_monitor.stop()
     seconds = round(time.monotonic() - t0, 1)
     (run.root / "child.log").write_text("".join(lines), encoding="utf-8")
-    import resource
 
-    peak_mb = round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024)
     results_path = out / "demo_results.json"
     results = json.loads(results_path.read_text()) if results_path.is_file() else {}
     timings_path = out / "logs/timings.json"

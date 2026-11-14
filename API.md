@@ -4670,7 +4670,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
         "checks": [
           {
             "check_id": "S-DUP-DOMAIN",
-            "description": "No two student-owned rows share a PK or a DATABASE_DESIGN §4 unique key.",
+            "description": "No two student-owned rows share a PK or a DATABASE_DESIGN Â§4 unique key.",
             "family": "STRUCTURAL",
             "findings": 0,
             "records_checked": 24019,
@@ -4678,7 +4678,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "S-DUP-MASTER",
-            "description": "No two master-data rows share a PK or a DATABASE_DESIGN §4 unique key.",
+            "description": "No two master-data rows share a PK or a DATABASE_DESIGN Â§4 unique key.",
             "family": "STRUCTURAL",
             "findings": 0,
             "records_checked": 1951,
@@ -4718,7 +4718,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "S-ID-GAPS-PARENT",
-            "description": "No counter is missing within a student's invoices of a year, an invoice's lines, an award's allocations or a payment's allocations (DATABASE_DESIGN §2 counter scopes).",
+            "description": "No counter is missing within a student's invoices of a year, an invoice's lines, an award's allocations or a payment's allocations (DATABASE_DESIGN Â§2 counter scopes).",
             "family": "STRUCTURAL",
             "findings": 0,
             "records_checked": 4169,
@@ -4726,7 +4726,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "S-ID-GAPS-YEAR",
-            "description": "No counter is missing in a global sequence (STU, PRG, SCT) or a per-year one (ENR, ELG, SCH, PAY, REF, LED, SNAP, EVT per entity) (DATABASE_DESIGN §2 counter scopes).",
+            "description": "No counter is missing in a global sequence (STU, PRG, SCT) or a per-year one (ENR, ELG, SCH, PAY, REF, LED, SNAP, EVT per entity) (DATABASE_DESIGN Â§2 counter scopes).",
             "family": "STRUCTURAL",
             "findings": 0,
             "records_checked": 8440,
@@ -4798,7 +4798,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "RL-ENROLLMENT-RULES",
-            "description": "An enrollment is in a billable term, in an active program, with credits within the program's range (ARCHITECTURE §10: non-billable term, credits outside program range).",
+            "description": "An enrollment is in a billable term, in an active program, with credits within the program's range (ARCHITECTURE Â§10: non-billable term, credits outside program range).",
             "family": "RELATIONSHIP",
             "findings": 0,
             "records_checked": 300,
@@ -4902,7 +4902,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "T-EXIT-DATES",
-            "description": "A withdrawal is within the term (start ≤ date ≤ end); a cancellation is before the start; both on or after enrolled_on (BR-WDR-01/02).",
+            "description": "A withdrawal is within the term (start â‰¤ date â‰¤ end); a cancellation is before the start; both on or after enrolled_on (BR-WDR-01/02).",
             "family": "TEMPORAL",
             "findings": 0,
             "records_checked": 300,
@@ -4926,7 +4926,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "T-INVOICE-DATES",
-            "description": "enrolled_on ≤ issue_date ≤ due_date.",
+            "description": "enrolled_on â‰¤ issue_date â‰¤ due_date.",
             "family": "TEMPORAL",
             "findings": 0,
             "records_checked": 303,
@@ -4942,7 +4942,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "T-REFUND-DATES",
-            "description": "requested_date ≥ the source payment's received_date; processed_date ≥ requested_date (DATABASE_DESIGN Refund).",
+            "description": "requested_date â‰¥ the source payment's received_date; processed_date â‰¥ requested_date (DATABASE_DESIGN Refund).",
             "family": "TEMPORAL",
             "findings": 0,
             "records_checked": 25,
@@ -4950,7 +4950,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "T-SCHOLARSHIP-DATES",
-            "description": "award_date ≥ the eligibility's evaluated_on; an APPLY row on or after the award date; a REVERSE row on or after the row it reverses (DATABASE_DESIGN Scholarship rules).",
+            "description": "award_date â‰¥ the eligibility's evaluated_on; an APPLY row on or after the award date; a REVERSE row on or after the row it reverses (DATABASE_DESIGN Scholarship rules).",
             "family": "TEMPORAL",
             "findings": 0,
             "records_checked": 340,
@@ -4958,7 +4958,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "T-STUDENT-AGE",
-            "description": "A student is 16–60 years old on the admit term's start date (DATABASE_DESIGN SV).",
+            "description": "A student is 16â€“60 years old on the admit term's start date (DATABASE_DESIGN SV).",
             "family": "TEMPORAL",
             "findings": 0,
             "records_checked": 100,
@@ -4998,7 +4998,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-AWARD-APPLIED",
-            "description": "Σ net allocations of an award ≤ its awarded_amount (DATABASE_DESIGN SV).",
+            "description": "Î£ net allocations of an award â‰¤ its awarded_amount (DATABASE_DESIGN SV).",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 153,
@@ -5038,7 +5038,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-INVOICE-TOTAL",
-            "description": "invoice.total_amount = Σ net of its FEE lines (BR-INV-02).",
+            "description": "invoice.total_amount = Î£ net of its FEE lines (BR-INV-02).",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 303,
@@ -5046,7 +5046,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-LATE-FEE",
-            "description": "BR-LATE-01, on what the data can re-check: at most one late fee per invoice, posted the day after due_date + grace_days, on an invoice still ISSUED then, within [₹500, ₹5,000] and no more than 2 % (clamped) of the charges posted by the end of the grace period.",
+            "description": "BR-LATE-01, on what the data can re-check: at most one late fee per invoice, posted the day after due_date + grace_days, on an invoice still ISSUED then, within [â‚¹500, â‚¹5,000] and no more than 2 % (clamped) of the charges posted by the end of the grace period.",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 33,
@@ -5062,7 +5062,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-LINE-AMOUNTS",
-            "description": "gross = quantity × unit (BR-FEE-02); net = gross − waiver with 0 ≤ waiver ≤ gross (BR-WAV-01).",
+            "description": "gross = quantity Ã— unit (BR-FEE-02); net = gross âˆ’ waiver with 0 â‰¤ waiver â‰¤ gross (BR-WAV-01).",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 1784,
@@ -5070,7 +5070,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-LINE-OPEN",
-            "description": "Every FEE/LATE_FEE line's open amount ≥ 0, and its adjustments never exceed it (BR-ALC-02), as of the run date.",
+            "description": "Every FEE/LATE_FEE line's open amount â‰¥ 0, and its adjustments never exceed it (BR-ALC-02), as of the run date.",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 1757,
@@ -5086,7 +5086,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-RELEASE-BOUNDS",
-            "description": "Σ deallocations of an ALLOCATE row ≤ its amount (BR-ALC-05); Σ reversals of an APPLY row ≤ its amount (BR-SCH-07).",
+            "description": "Î£ deallocations of an ALLOCATE row â‰¤ its amount (BR-ALC-05); Î£ reversals of an APPLY row â‰¤ its amount (BR-SCH-07).",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 2052,
@@ -5094,7 +5094,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-SCHOLARSHIP-CAP",
-            "description": "An award is at most what Phase 3's award_amount allows: PERCENT × eligible base or FIXED, capped by the type's max_amount_per_term less the same type's earlier awards to the student that term (BR-SCH-03), in (award_date, scholarship_id) order.",
+            "description": "An award is at most what Phase 3's award_amount allows: PERCENT Ã— eligible base or FIXED, capped by the type's max_amount_per_term less the same type's earlier awards to the student that term (BR-SCH-03), in (award_date, scholarship_id) order.",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 153,
@@ -5102,7 +5102,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "A-SNAPSHOT-TOTALS",
-            "description": "A snapshot's total_debits / total_credits are Σ positive / Σ negative ledger entries dated on or before its as_of_date (DATABASE_DESIGN §3).",
+            "description": "A snapshot's total_debits / total_credits are Î£ positive / Î£ negative ledger entries dated on or before its as_of_date (DATABASE_DESIGN Â§3).",
             "family": "ARITHMETIC",
             "findings": 0,
             "records_checked": 397,
@@ -5134,7 +5134,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "Q-DUPLICATE-INVOICE",
-            "description": "At most one invoice with lifecycle ≠ VOID per enrollment (BR-INV-01); every later one (by issue_date, invoice_id) is a duplicate.",
+            "description": "At most one invoice with lifecycle â‰  VOID per enrollment (BR-INV-01); every later one (by issue_date, invoice_id) is a duplicate.",
             "family": "REQUIRED",
             "findings": 3,
             "records_checked": 300,
@@ -5142,7 +5142,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "Q-PAYMENT-OVER-ALLOCATED",
-            "description": "Σ net allocations of a payment ≤ its amount − Σ its refunds not REJECTED (BR-ALC-01), with ``payments.calculators.payment_available``.",
+            "description": "Î£ net allocations of a payment â‰¤ its amount âˆ’ Î£ its refunds not REJECTED (BR-ALC-01), with ``payments.calculators.payment_available``.",
             "family": "REQUIRED",
             "findings": 6,
             "records_checked": 500,
@@ -5150,7 +5150,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "Q-REFUND-EXCEEDS-NET-PAID",
-            "description": "Every refund not REJECTED ≤ net paid at its request, as Phase 4 computes it (BR-REF-01).",
+            "description": "Every refund not REJECTED â‰¤ net paid at its request, as Phase 4 computes it (BR-REF-01).",
             "family": "REQUIRED",
             "findings": 3,
             "records_checked": 25,
@@ -5166,7 +5166,7 @@ Captured request: `GET /api/v1/reconciliation/runs/?page_size=1&scope=ALL`
           },
           {
             "check_id": "B-IDENTITY",
-            "description": "Per student: ledger balance = Σ invoice outstanding − unallocated credit (BR-BAL-02; decision D-R3: reported as ARITHMETIC_MISMATCH on the student).",
+            "description": "Per student: ledger balance = Î£ invoice outstanding âˆ’ unallocated credit (BR-BAL-02; decision D-R3: reported as ARITHMETIC_MISMATCH on the student).",
             "family": "RECONCILIATION",
             "findings": 0,
             "records_checked": 100,
@@ -5266,7 +5266,7 @@ Request body:
     "checks": [
       {
         "check_id": "S-DUP-DOMAIN",
-        "description": "No two student-owned rows share a PK or a DATABASE_DESIGN §4 unique key.",
+        "description": "No two student-owned rows share a PK or a DATABASE_DESIGN Â§4 unique key.",
         "family": "STRUCTURAL",
         "findings": 0,
         "records_checked": 97,
@@ -5290,7 +5290,7 @@ Request body:
       },
       {
         "check_id": "S-ID-GAPS-PARENT",
-        "description": "No counter is missing within a student's invoices of a year, an invoice's lines, an award's allocations or a payment's allocations (DATABASE_DESIGN §2 counter scopes).",
+        "description": "No counter is missing within a student's invoices of a year, an invoice's lines, an award's allocations or a payment's allocations (DATABASE_DESIGN Â§2 counter scopes).",
         "family": "STRUCTURAL",
         "findings": 0,
         "records_checked": 15,
@@ -5346,7 +5346,7 @@ Request body:
       },
       {
         "check_id": "RL-ENROLLMENT-RULES",
-        "description": "An enrollment is in a billable term, in an active program, with credits within the program's range (ARCHITECTURE §10: non-billable term, credits outside program range).",
+        "description": "An enrollment is in a billable term, in an active program, with credits within the program's range (ARCHITECTURE Â§10: non-billable term, credits outside program range).",
         "family": "RELATIONSHIP",
         "findings": 0,
         "records_checked": 1,
@@ -5450,7 +5450,7 @@ Request body:
       },
       {
         "check_id": "T-EXIT-DATES",
-        "description": "A withdrawal is within the term (start ≤ date ≤ end); a cancellation is before the start; both on or after enrolled_on (BR-WDR-01/02).",
+        "description": "A withdrawal is within the term (start â‰¤ date â‰¤ end); a cancellation is before the start; both on or after enrolled_on (BR-WDR-01/02).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 1,
@@ -5466,7 +5466,7 @@ Request body:
       },
       {
         "check_id": "T-INVOICE-DATES",
-        "description": "enrolled_on ≤ issue_date ≤ due_date.",
+        "description": "enrolled_on â‰¤ issue_date â‰¤ due_date.",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 1,
@@ -5482,7 +5482,7 @@ Request body:
       },
       {
         "check_id": "T-REFUND-DATES",
-        "description": "requested_date ≥ the source payment's received_date; processed_date ≥ requested_date (DATABASE_DESIGN Refund).",
+        "description": "requested_date â‰¥ the source payment's received_date; processed_date â‰¥ requested_date (DATABASE_DESIGN Refund).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 1,
@@ -5490,7 +5490,7 @@ Request body:
       },
       {
         "check_id": "T-SCHOLARSHIP-DATES",
-        "description": "award_date ≥ the eligibility's evaluated_on; an APPLY row on or after the award date; a REVERSE row on or after the row it reverses (DATABASE_DESIGN Scholarship rules).",
+        "description": "award_date â‰¥ the eligibility's evaluated_on; an APPLY row on or after the award date; a REVERSE row on or after the row it reverses (DATABASE_DESIGN Scholarship rules).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 2,
@@ -5498,7 +5498,7 @@ Request body:
       },
       {
         "check_id": "T-STUDENT-AGE",
-        "description": "A student is 16–60 years old on the admit term's start date (DATABASE_DESIGN SV).",
+        "description": "A student is 16â€“60 years old on the admit term's start date (DATABASE_DESIGN SV).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 1,
@@ -5530,7 +5530,7 @@ Request body:
       },
       {
         "check_id": "A-AWARD-APPLIED",
-        "description": "Σ net allocations of an award ≤ its awarded_amount (DATABASE_DESIGN SV).",
+        "description": "Î£ net allocations of an award â‰¤ its awarded_amount (DATABASE_DESIGN SV).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 1,
@@ -5570,7 +5570,7 @@ Request body:
       },
       {
         "check_id": "A-INVOICE-TOTAL",
-        "description": "invoice.total_amount = Σ net of its FEE lines (BR-INV-02).",
+        "description": "invoice.total_amount = Î£ net of its FEE lines (BR-INV-02).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 1,
@@ -5578,7 +5578,7 @@ Request body:
       },
       {
         "check_id": "A-LATE-FEE",
-        "description": "BR-LATE-01, on what the data can re-check: at most one late fee per invoice, posted the day after due_date + grace_days, on an invoice still ISSUED then, within [₹500, ₹5,000] and no more than 2 % (clamped) of the charges posted by the end of the grace period.",
+        "description": "BR-LATE-01, on what the data can re-check: at most one late fee per invoice, posted the day after due_date + grace_days, on an invoice still ISSUED then, within [â‚¹500, â‚¹5,000] and no more than 2 % (clamped) of the charges posted by the end of the grace period.",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 0,
@@ -5594,7 +5594,7 @@ Request body:
       },
       {
         "check_id": "A-LINE-AMOUNTS",
-        "description": "gross = quantity × unit (BR-FEE-02); net = gross − waiver with 0 ≤ waiver ≤ gross (BR-WAV-01).",
+        "description": "gross = quantity Ã— unit (BR-FEE-02); net = gross âˆ’ waiver with 0 â‰¤ waiver â‰¤ gross (BR-WAV-01).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 6,
@@ -5602,7 +5602,7 @@ Request body:
       },
       {
         "check_id": "A-LINE-OPEN",
-        "description": "Every FEE/LATE_FEE line's open amount ≥ 0, and its adjustments never exceed it (BR-ALC-02), as of the run date.",
+        "description": "Every FEE/LATE_FEE line's open amount â‰¥ 0, and its adjustments never exceed it (BR-ALC-02), as of the run date.",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 6,
@@ -5618,7 +5618,7 @@ Request body:
       },
       {
         "check_id": "A-RELEASE-BOUNDS",
-        "description": "Σ deallocations of an ALLOCATE row ≤ its amount (BR-ALC-05); Σ reversals of an APPLY row ≤ its amount (BR-SCH-07).",
+        "description": "Î£ deallocations of an ALLOCATE row â‰¤ its amount (BR-ALC-05); Î£ reversals of an APPLY row â‰¤ its amount (BR-SCH-07).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 8,
@@ -5626,7 +5626,7 @@ Request body:
       },
       {
         "check_id": "A-SCHOLARSHIP-CAP",
-        "description": "An award is at most what Phase 3's award_amount allows: PERCENT × eligible base or FIXED, capped by the type's max_amount_per_term less the same type's earlier awards to the student that term (BR-SCH-03), in (award_date, scholarship_id) order.",
+        "description": "An award is at most what Phase 3's award_amount allows: PERCENT Ã— eligible base or FIXED, capped by the type's max_amount_per_term less the same type's earlier awards to the student that term (BR-SCH-03), in (award_date, scholarship_id) order.",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 1,
@@ -5634,7 +5634,7 @@ Request body:
       },
       {
         "check_id": "A-SNAPSHOT-TOTALS",
-        "description": "A snapshot's total_debits / total_credits are Σ positive / Σ negative ledger entries dated on or before its as_of_date (DATABASE_DESIGN §3).",
+        "description": "A snapshot's total_debits / total_credits are Î£ positive / Î£ negative ledger entries dated on or before its as_of_date (DATABASE_DESIGN Â§3).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 1,
@@ -5666,7 +5666,7 @@ Request body:
       },
       {
         "check_id": "Q-DUPLICATE-INVOICE",
-        "description": "At most one invoice with lifecycle ≠ VOID per enrollment (BR-INV-01); every later one (by issue_date, invoice_id) is a duplicate.",
+        "description": "At most one invoice with lifecycle â‰  VOID per enrollment (BR-INV-01); every later one (by issue_date, invoice_id) is a duplicate.",
         "family": "REQUIRED",
         "findings": 0,
         "records_checked": 1,
@@ -5674,7 +5674,7 @@ Request body:
       },
       {
         "check_id": "Q-PAYMENT-OVER-ALLOCATED",
-        "description": "Σ net allocations of a payment ≤ its amount − Σ its refunds not REJECTED (BR-ALC-01), with ``payments.calculators.payment_available``.",
+        "description": "Î£ net allocations of a payment â‰¤ its amount âˆ’ Î£ its refunds not REJECTED (BR-ALC-01), with ``payments.calculators.payment_available``.",
         "family": "REQUIRED",
         "findings": 0,
         "records_checked": 2,
@@ -5682,7 +5682,7 @@ Request body:
       },
       {
         "check_id": "Q-REFUND-EXCEEDS-NET-PAID",
-        "description": "Every refund not REJECTED ≤ net paid at its request, as Phase 4 computes it (BR-REF-01).",
+        "description": "Every refund not REJECTED â‰¤ net paid at its request, as Phase 4 computes it (BR-REF-01).",
         "family": "REQUIRED",
         "findings": 0,
         "records_checked": 1,
@@ -5698,7 +5698,7 @@ Request body:
       },
       {
         "check_id": "B-IDENTITY",
-        "description": "Per student: ledger balance = Σ invoice outstanding − unallocated credit (BR-BAL-02; decision D-R3: reported as ARITHMETIC_MISMATCH on the student).",
+        "description": "Per student: ledger balance = Î£ invoice outstanding âˆ’ unallocated credit (BR-BAL-02; decision D-R3: reported as ARITHMETIC_MISMATCH on the student).",
         "family": "RECONCILIATION",
         "findings": 0,
         "records_checked": 1,
@@ -5824,7 +5824,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
     "checks": [
       {
         "check_id": "S-DUP-DOMAIN",
-        "description": "No two student-owned rows share a PK or a DATABASE_DESIGN §4 unique key.",
+        "description": "No two student-owned rows share a PK or a DATABASE_DESIGN Â§4 unique key.",
         "family": "STRUCTURAL",
         "findings": 0,
         "records_checked": 24019,
@@ -5832,7 +5832,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "S-DUP-MASTER",
-        "description": "No two master-data rows share a PK or a DATABASE_DESIGN §4 unique key.",
+        "description": "No two master-data rows share a PK or a DATABASE_DESIGN Â§4 unique key.",
         "family": "STRUCTURAL",
         "findings": 0,
         "records_checked": 1951,
@@ -5872,7 +5872,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "S-ID-GAPS-PARENT",
-        "description": "No counter is missing within a student's invoices of a year, an invoice's lines, an award's allocations or a payment's allocations (DATABASE_DESIGN §2 counter scopes).",
+        "description": "No counter is missing within a student's invoices of a year, an invoice's lines, an award's allocations or a payment's allocations (DATABASE_DESIGN Â§2 counter scopes).",
         "family": "STRUCTURAL",
         "findings": 0,
         "records_checked": 4169,
@@ -5880,7 +5880,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "S-ID-GAPS-YEAR",
-        "description": "No counter is missing in a global sequence (STU, PRG, SCT) or a per-year one (ENR, ELG, SCH, PAY, REF, LED, SNAP, EVT per entity) (DATABASE_DESIGN §2 counter scopes).",
+        "description": "No counter is missing in a global sequence (STU, PRG, SCT) or a per-year one (ENR, ELG, SCH, PAY, REF, LED, SNAP, EVT per entity) (DATABASE_DESIGN Â§2 counter scopes).",
         "family": "STRUCTURAL",
         "findings": 0,
         "records_checked": 8440,
@@ -5952,7 +5952,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "RL-ENROLLMENT-RULES",
-        "description": "An enrollment is in a billable term, in an active program, with credits within the program's range (ARCHITECTURE §10: non-billable term, credits outside program range).",
+        "description": "An enrollment is in a billable term, in an active program, with credits within the program's range (ARCHITECTURE Â§10: non-billable term, credits outside program range).",
         "family": "RELATIONSHIP",
         "findings": 0,
         "records_checked": 300,
@@ -6056,7 +6056,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "T-EXIT-DATES",
-        "description": "A withdrawal is within the term (start ≤ date ≤ end); a cancellation is before the start; both on or after enrolled_on (BR-WDR-01/02).",
+        "description": "A withdrawal is within the term (start â‰¤ date â‰¤ end); a cancellation is before the start; both on or after enrolled_on (BR-WDR-01/02).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 300,
@@ -6080,7 +6080,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "T-INVOICE-DATES",
-        "description": "enrolled_on ≤ issue_date ≤ due_date.",
+        "description": "enrolled_on â‰¤ issue_date â‰¤ due_date.",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 303,
@@ -6096,7 +6096,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "T-REFUND-DATES",
-        "description": "requested_date ≥ the source payment's received_date; processed_date ≥ requested_date (DATABASE_DESIGN Refund).",
+        "description": "requested_date â‰¥ the source payment's received_date; processed_date â‰¥ requested_date (DATABASE_DESIGN Refund).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 25,
@@ -6104,7 +6104,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "T-SCHOLARSHIP-DATES",
-        "description": "award_date ≥ the eligibility's evaluated_on; an APPLY row on or after the award date; a REVERSE row on or after the row it reverses (DATABASE_DESIGN Scholarship rules).",
+        "description": "award_date â‰¥ the eligibility's evaluated_on; an APPLY row on or after the award date; a REVERSE row on or after the row it reverses (DATABASE_DESIGN Scholarship rules).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 340,
@@ -6112,7 +6112,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "T-STUDENT-AGE",
-        "description": "A student is 16–60 years old on the admit term's start date (DATABASE_DESIGN SV).",
+        "description": "A student is 16â€“60 years old on the admit term's start date (DATABASE_DESIGN SV).",
         "family": "TEMPORAL",
         "findings": 0,
         "records_checked": 100,
@@ -6152,7 +6152,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-AWARD-APPLIED",
-        "description": "Σ net allocations of an award ≤ its awarded_amount (DATABASE_DESIGN SV).",
+        "description": "Î£ net allocations of an award â‰¤ its awarded_amount (DATABASE_DESIGN SV).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 153,
@@ -6192,7 +6192,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-INVOICE-TOTAL",
-        "description": "invoice.total_amount = Σ net of its FEE lines (BR-INV-02).",
+        "description": "invoice.total_amount = Î£ net of its FEE lines (BR-INV-02).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 303,
@@ -6200,7 +6200,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-LATE-FEE",
-        "description": "BR-LATE-01, on what the data can re-check: at most one late fee per invoice, posted the day after due_date + grace_days, on an invoice still ISSUED then, within [₹500, ₹5,000] and no more than 2 % (clamped) of the charges posted by the end of the grace period.",
+        "description": "BR-LATE-01, on what the data can re-check: at most one late fee per invoice, posted the day after due_date + grace_days, on an invoice still ISSUED then, within [â‚¹500, â‚¹5,000] and no more than 2 % (clamped) of the charges posted by the end of the grace period.",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 33,
@@ -6216,7 +6216,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-LINE-AMOUNTS",
-        "description": "gross = quantity × unit (BR-FEE-02); net = gross − waiver with 0 ≤ waiver ≤ gross (BR-WAV-01).",
+        "description": "gross = quantity Ã— unit (BR-FEE-02); net = gross âˆ’ waiver with 0 â‰¤ waiver â‰¤ gross (BR-WAV-01).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 1784,
@@ -6224,7 +6224,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-LINE-OPEN",
-        "description": "Every FEE/LATE_FEE line's open amount ≥ 0, and its adjustments never exceed it (BR-ALC-02), as of the run date.",
+        "description": "Every FEE/LATE_FEE line's open amount â‰¥ 0, and its adjustments never exceed it (BR-ALC-02), as of the run date.",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 1757,
@@ -6240,7 +6240,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-RELEASE-BOUNDS",
-        "description": "Σ deallocations of an ALLOCATE row ≤ its amount (BR-ALC-05); Σ reversals of an APPLY row ≤ its amount (BR-SCH-07).",
+        "description": "Î£ deallocations of an ALLOCATE row â‰¤ its amount (BR-ALC-05); Î£ reversals of an APPLY row â‰¤ its amount (BR-SCH-07).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 2052,
@@ -6248,7 +6248,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-SCHOLARSHIP-CAP",
-        "description": "An award is at most what Phase 3's award_amount allows: PERCENT × eligible base or FIXED, capped by the type's max_amount_per_term less the same type's earlier awards to the student that term (BR-SCH-03), in (award_date, scholarship_id) order.",
+        "description": "An award is at most what Phase 3's award_amount allows: PERCENT Ã— eligible base or FIXED, capped by the type's max_amount_per_term less the same type's earlier awards to the student that term (BR-SCH-03), in (award_date, scholarship_id) order.",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 153,
@@ -6256,7 +6256,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "A-SNAPSHOT-TOTALS",
-        "description": "A snapshot's total_debits / total_credits are Σ positive / Σ negative ledger entries dated on or before its as_of_date (DATABASE_DESIGN §3).",
+        "description": "A snapshot's total_debits / total_credits are Î£ positive / Î£ negative ledger entries dated on or before its as_of_date (DATABASE_DESIGN Â§3).",
         "family": "ARITHMETIC",
         "findings": 0,
         "records_checked": 397,
@@ -6288,7 +6288,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "Q-DUPLICATE-INVOICE",
-        "description": "At most one invoice with lifecycle ≠ VOID per enrollment (BR-INV-01); every later one (by issue_date, invoice_id) is a duplicate.",
+        "description": "At most one invoice with lifecycle â‰  VOID per enrollment (BR-INV-01); every later one (by issue_date, invoice_id) is a duplicate.",
         "family": "REQUIRED",
         "findings": 3,
         "records_checked": 300,
@@ -6296,7 +6296,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "Q-PAYMENT-OVER-ALLOCATED",
-        "description": "Σ net allocations of a payment ≤ its amount − Σ its refunds not REJECTED (BR-ALC-01), with ``payments.calculators.payment_available``.",
+        "description": "Î£ net allocations of a payment â‰¤ its amount âˆ’ Î£ its refunds not REJECTED (BR-ALC-01), with ``payments.calculators.payment_available``.",
         "family": "REQUIRED",
         "findings": 6,
         "records_checked": 500,
@@ -6304,7 +6304,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "Q-REFUND-EXCEEDS-NET-PAID",
-        "description": "Every refund not REJECTED ≤ net paid at its request, as Phase 4 computes it (BR-REF-01).",
+        "description": "Every refund not REJECTED â‰¤ net paid at its request, as Phase 4 computes it (BR-REF-01).",
         "family": "REQUIRED",
         "findings": 3,
         "records_checked": 25,
@@ -6320,7 +6320,7 @@ Captured request: `GET /api/v1/reconciliation/runs/RECON-2026-000001/`
       },
       {
         "check_id": "B-IDENTITY",
-        "description": "Per student: ledger balance = Σ invoice outstanding − unallocated credit (BR-BAL-02; decision D-R3: reported as ARITHMETIC_MISMATCH on the student).",
+        "description": "Per student: ledger balance = Î£ invoice outstanding âˆ’ unallocated credit (BR-BAL-02; decision D-R3: reported as ARITHMETIC_MISMATCH on the student).",
         "family": "RECONCILIATION",
         "findings": 0,
         "records_checked": 100,
