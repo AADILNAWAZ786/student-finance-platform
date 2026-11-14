@@ -25,6 +25,13 @@ Stages (each checked; the first failure stops the demo with a non-zero exit):
                (URLs, token authentication, permissions, serializers, services), on top of the
                generated dataset; every request and response captured
 
+  F reference  every other operation of the API once (master-data writes, fee versions,
+               status changes, void, reject, refresh, an ALL-scope reconciliation run, every
+               list and detail read), so all 64 operations are exercised and captured
+  G permissions every operation called as each role and anonymously with an empty body and
+               unknown IDs (refused before validation, so nothing is written): the measured
+               role table API.md publishes
+
 C and D run before E adds students: the evaluation counts the students in the database, so it
 must see exactly the generated dataset (P9-O3).
 
@@ -34,8 +41,10 @@ cookies), ``demo_results.json``, ``export/`` (Phase 8 layout), ``logs/``.
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -50,11 +59,24 @@ REPO = rp.REPO
 MARKER = "SF_DEMO_ISOLATED"
 SETTINGS_NAME = "sf_demo_settings"
 BUSINESS_DATE = date(2026, 8, 1)  # the scenario's "today" for requests that carry no date
-# Values that differ between identical runs: execution times only. Masked as "<volatile>" in the
-# transcript; nothing else is masked (no business value, no calculated result).
-VOLATILE_KEYS = frozenset({"recorded_at", "started_at", "finished_at"})
+# Execution metadata, masked as "<volatile>" in the transcript: the system clock
+# (recorded_at, started_at, finished_at), the git SHA of the code that ran (code_version; never
+# checksummed, P8-D8) and the host's SQLite library version reported by the health check
+# (sqlite_version; differs between interpreter builds on identical data). Nothing else is
+# masked: no business value, no calculated result.
+VOLATILE_KEYS = frozenset(
+    {"recorded_at", "started_at", "finished_at", "code_version", "sqlite_version"}
+)
 VOLATILE = "<volatile>"
-STAGES = ("A_dataset", "B_export", "C_anomalies", "D_evaluation", "E_api")
+STAGES = (
+    "A_dataset",
+    "B_export",
+    "C_anomalies",
+    "D_evaluation",
+    "E_api",
+    "F_reference",
+    "G_permissions",
+)
 
 
 class DemoError(Exception):
@@ -252,6 +274,7 @@ class Child:
     config: str | None
     log: object
     results: dict = field(default_factory=dict)
+    ctx: dict = field(default_factory=dict)  # IDs created by stage E, reused by stage F
     timings: dict = field(default_factory=dict)  # execution metadata: never in the results
 
     def say(self, text=""):
@@ -323,7 +346,7 @@ class Child:
         self.say(f"  exported {len(m['files'])} files, combined_sha256={m['combined_sha256']}")
         self.say(f"  verify_export: {len(report.checks)} checks PASS")
 
-    # C ---------------------------------------------------------------------------------------
+    # E ---------------------------------------------------------------------------------------
     def stage_api(self, api: Api):
         from academics.models import Program, Term
 
@@ -565,7 +588,7 @@ class Child:
 
         # §9.3 step 10 (and snapshots)
         api.stage = "10 snapshot and reconciliation of the demo student"
-        api.call(
+        snap = api.call(
             "balance snapshot",
             "POST",
             "/api/v1/balance-snapshots/",
@@ -704,8 +727,380 @@ class Child:
         # the other invoices a dry run finds are the injected DUPLICATE_INVOICE copies: unpaid,
         # and created after the generator's late-fee stage (P9-O2); nothing is posted
         r["late_fee_dry_run_assessed"] = [x["invoice_id"] for x in late["assessed"]]
+        self.ctx.update(
+            sid=sid,
+            enr=enr["enrollment_id"],
+            inv=inv_id,
+            pid=pid,
+            rid=rid,
+            award=award,
+            snap=snap,
+            sid_b=sid_b,
+            enr_b=enr_b["enrollment_id"],
+            sid_c=sid_c,
+            inv_d=inv_d["invoice_id"],
+            program=program.pk,
+            term=fall.pk,
+            students=[sid, sid_b, sid_c, sid_d],
+        )
 
-    # D ---------------------------------------------------------------------------------------
+    # F ---------------------------------------------------------------------------------------
+    def stage_reference(self, api: Api):
+        """Every remaining operation of the API, once, on the data built so far: master-data
+        writes, fee versions, status changes, void, reject, refresh, the full reconciliation
+        run and every list / detail read (small pages, documented filters)."""
+        c, r = self.ctx, self.results.setdefault("F_reference", {})
+        api.stage = "health and master data"
+        api.call("health (public)", "GET", "/api/v1/health/")
+        prg = api.call(
+            "create a program",
+            "POST",
+            "/api/v1/programs/",
+            {
+                "code": "MSC-DEMO",
+                "name": "MSc Demonstration Studies",
+                "level": "PG",
+                "department": "Demonstration",
+                "is_stem": False,
+                "has_lab": False,
+                "min_credits": 8,
+                "max_credits": 16,
+            },
+            expect=201,
+        )
+        api.call("program", "GET", f"/api/v1/programs/{prg['program_id']}/")
+        term = api.call(
+            "create a historical (non-billable) term",
+            "POST",
+            "/api/v1/terms/",
+            {
+                "year": 2022,
+                "season": "FALL",
+                "is_billable": False,
+                "invoice_date": "2022-08-15",
+                "due_date": "2022-09-12",
+                "start_date": "2022-09-05",
+                "census_date": "2022-10-03",
+                "end_date": "2022-12-17",
+            },
+            expect=201,
+        )
+        api.call("term", "GET", f"/api/v1/terms/{term['term_id']}/")
+        api.call("terms by year", "GET", "/api/v1/terms/", params={"year": 2026})
+
+        api.stage = "fee-schedule versions"
+        fee = api.call(
+            "create fee schedule version 1",
+            "POST",
+            "/api/v1/fee-schedules/",
+            {
+                "program": prg["program_id"],
+                "term": c["term"],
+                "fee_type": "TUITION",
+                "residency": "DOMESTIC",
+                "charge_basis": "PER_CREDIT",
+                "amount": "8000.00",
+                "effective_from": "2026-01-01",
+            },
+            expect=201,
+        )
+        api.call(
+            "new version (price change)",
+            "POST",
+            f"/api/v1/fee-schedules/{fee['fee_schedule_id']}/new-version/",
+            {"amount": "8320.00", "effective_from": "2026-08-01"},
+            expect=201,
+        )
+        api.call(
+            "version history with derived windows",
+            "GET",
+            f"/api/v1/fee-schedules/{fee['fee_schedule_id']}/history/",
+        )
+        api.call(
+            "versions in force on a date",
+            "GET",
+            "/api/v1/fee-schedules/",
+            params={"program": prg["program_id"], "in_force_on": "2026-08-17"},
+        )
+
+        api.stage = "students"
+        api.call(
+            "students of a program",
+            "GET",
+            "/api/v1/students/",
+            params={"program": c["program"], "page_size": 2},
+        )
+        api.call("student", "GET", f"/api/v1/students/{c['sid']}/")
+        api.call(
+            "update contact fields",
+            "PATCH",
+            f"/api/v1/students/{c['sid']}/",
+            {"email": "asha.rao.demo@example.edu"},
+        )
+        api.call(
+            "status: ACTIVE to ON_HOLD",
+            "POST",
+            f"/api/v1/students/{c['sid']}/status/",
+            {"to_status": "ON_HOLD", "reason": "FINANCIAL_HOLD", "event_date": "2026-10-01"},
+        )
+        api.call(
+            "status: ON_HOLD to ACTIVE",
+            "POST",
+            f"/api/v1/students/{c['sid']}/status/",
+            {"to_status": "ACTIVE", "reason": "HOLD_RELEASED", "event_date": "2026-10-05"},
+        )
+        api.call(
+            "status: ACTIVE to ACTIVE (illegal transition)",
+            "POST",
+            f"/api/v1/students/{c['sid']}/status/",
+            {"to_status": "ACTIVE", "reason": "NONE", "event_date": "2026-10-06"},
+            expect=409,
+            code="ILLEGAL_TRANSITION",
+        )
+        api.call(
+            "statement: invoices, lines, allocations, refunds",
+            "GET",
+            f"/api/v1/students/{c['sid']}/statement/",
+        )
+        api.call(
+            "balance at a past date",
+            "GET",
+            f"/api/v1/students/{c['sid']}/balance/",
+            params={"as_of": "2026-08-31"},
+        )
+
+        api.stage = "enrollments and invoices"
+        api.call(
+            "enrollments of a student", "GET", "/api/v1/enrollments/", params={"student": c["sid"]}
+        )
+        api.call("enrollment", "GET", f"/api/v1/enrollments/{c['enr']}/")
+        api.call("invoices of a student", "GET", "/api/v1/invoices/", params={"student": c["sid"]})
+        api.call("invoice", "GET", f"/api/v1/invoices/{c['inv_d']}/")
+        api.call(
+            "void an invoice that has allocations",
+            "POST",
+            f"/api/v1/invoices/{c['inv']}/void/",
+            {"void_date": "2026-10-01"},
+            expect=409,
+            code="INVOICE_HAS_ALLOCATIONS",
+        )
+        void = api.call(
+            "void an invoice with nothing allocated",
+            "POST",
+            f"/api/v1/invoices/{c['inv_d']}/void/",
+            {"void_date": "2026-10-01"},
+        )
+        api.call(
+            "collection-status refresh",
+            "POST",
+            "/api/v1/billing/collection-status/refresh/",
+            {"as_of_date": "2026-12-31"},
+        )
+        r["voided_invoice"] = void["invoice_id"]
+        r["voided_collection_status"] = void["collection_status"]
+
+        api.stage = "scholarships"
+        sct = api.call(
+            "create a scholarship type (criteria)",
+            "POST",
+            "/api/v1/scholarship-types/",
+            {
+                "name": "Demonstration Bursary",
+                "category": "BURSARY",
+                "min_need_index": "0.70",
+                "residency": "ALL",
+                "first_term_only": False,
+                "program_restricted": False,
+                "program_ids": [],
+                "coverage_scope": "ELIGIBLE_LINES_ONLY",
+                "award_basis": "FIXED",
+                "award_value": "5000.00",
+                "max_amount_per_term": "5000.00",
+                "priority": 8,
+                "effective_from": "2026-01-01",
+            },
+            expect=201,
+        )
+        api.call(
+            "scholarship types by category",
+            "GET",
+            "/api/v1/scholarship-types/",
+            params={"category": "BURSARY"},
+        )
+        api.call(
+            "eligibility history",
+            "GET",
+            "/api/v1/eligibility/",
+            params={"student": c["sid"], "page_size": 2},
+        )
+        api.call(
+            "scholarships of a student",
+            "GET",
+            "/api/v1/scholarships/",
+            params={"student": c["sid"]},
+        )
+        api.call(
+            "scholarship with allocations and events",
+            "GET",
+            f"/api/v1/scholarships/{c['award']['scholarship_id']}/",
+        )
+        r["scholarship_type_created"] = sct["scholarship_type_id"]
+
+        api.stage = "payments and refunds"
+        api.call("payments of a student", "GET", "/api/v1/payments/", params={"student": c["sid"]})
+        api.call("payment", "GET", f"/api/v1/payments/{c['pid']}/")
+        api.call("allocations of a payment", "GET", f"/api/v1/payments/{c['pid']}/allocations/")
+        api.call(
+            "allocations by student",
+            "GET",
+            "/api/v1/payment-allocations/",
+            params={"student": c["sid"], "page_size": 2},
+        )
+        body = {
+            "student_id": c["sid_b"],
+            "amount": "6000.00",
+            "received_date": "2026-08-25",
+            "method": "CARD",
+            "payer_type": "SELF",
+            "external_reference": "DEMO-CARD-0002",
+        }
+        api.call(
+            "overpayment by the cancelled student",
+            "POST",
+            "/api/v1/payments/",
+            {**body, "auto_allocate": True},
+            expect=201,
+        )
+        api.call(
+            "the same payment again (idempotency key)",
+            "POST",
+            "/api/v1/payments/",
+            body,
+            expect=409,
+            code="DUPLICATE_PAYMENT",
+        )
+        credit = api.call("refundable", "GET", f"/api/v1/students/{c['sid_b']}/refundable/")
+        source = next(p["payment_id"] for p in credit["payments"] if p["available"] != "0.00")
+        req = api.call(
+            "refund request",
+            "POST",
+            "/api/v1/refunds/",
+            {
+                "payment_id": source,
+                "amount": credit["max_refundable"],
+                "requested_date": "2026-08-27",
+            },
+            expect=201,
+        )
+        api.call(
+            "reject the refund",
+            "POST",
+            f"/api/v1/refunds/{req['refund_id']}/reject/",
+            {"on_date": "2026-08-28"},
+        )
+        api.call("refunds of a student", "GET", "/api/v1/refunds/", params={"student": c["sid"]})
+        api.call("refund with events", "GET", f"/api/v1/refunds/{c['rid']}/")
+        r["rejected_refund"] = req["refund_id"]
+
+        api.stage = "reconciliation"
+        run = api.call(
+            "reconciliation run, ALL scope",
+            "POST",
+            "/api/v1/reconciliation/runs/",
+            {"scope": "ALL", "as_of_date": "2026-12-31"},
+            expect=201,
+        )
+        if run["status"] != "COMPLETED":
+            raise StageFailed(f"the ALL-scope run did not complete: {run}")
+        for sid in c["students"]:
+            mine = api.call(
+                f"findings about {sid}",
+                "GET",
+                "/api/v1/anomalies/",
+                params={"run": run["run_id"], "student": sid},
+            )
+            if mine["count"]:
+                raise StageFailed(f"demo student {sid} has findings: {mine}")
+        api.call(
+            "reconciliation runs",
+            "GET",
+            "/api/v1/reconciliation/runs/",
+            params={"scope": "ALL", "page_size": 1},
+        )
+        api.call("reconciliation run", "GET", f"/api/v1/reconciliation/runs/{run['run_id']}/")
+        first = api.call(
+            "findings of one severity",
+            "GET",
+            "/api/v1/anomalies/",
+            params={"run": run["run_id"], "severity": "CRITICAL", "page_size": 1},
+        )
+        api.call("finding", "GET", f"/api/v1/anomalies/{first['results'][0]['finding_id']}/")
+        api.call(
+            "snapshots of a student",
+            "GET",
+            "/api/v1/balance-snapshots/",
+            params={"student": c["sid"]},
+        )
+        api.call(
+            "snapshot",
+            "GET",
+            f"/api/v1/balance-snapshots/{c['snap']['snapshots'][0]['snapshot_id']}/",
+        )
+        r["all_scope_run"], r["all_scope_findings"] = run["run_id"], run["findings_count"]
+        r["generation_run_findings"] = self.results["C_anomalies"]["findings_count"]
+
+        api.stage = "data generation"
+        gen = self.results["A_dataset"]["generation_run"]
+        api.call("generation runs", "GET", "/api/v1/datagen/runs/")
+        api.call("generation run", "GET", f"/api/v1/datagen/runs/{gen}/")
+        api.call(
+            "generate through the API (needs empty databases)",
+            "POST",
+            "/api/v1/datagen/runs/",
+            {"scale": "starter"},
+            expect=409,
+            code="DATASET_NOT_FRESH",
+        )
+
+    # G ---------------------------------------------------------------------------------------
+    def stage_permissions(self):
+        """Every operation of the OpenAPI schema, called once per role and anonymously with an
+        empty body and unknown IDs. DRF checks permissions before validation and before any
+        lookup, so 401 / 403 means refused and anything else means allowed; an allowed call
+        then fails validation, finds nothing or is refused as a conflict, so nothing is
+        written. The probe users' tokens are never recorded."""
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+        from drf_spectacular.generators import SchemaGenerator
+        from rest_framework.authtoken.models import Token
+        from rest_framework.test import APIClient
+
+        from core.permissions import ALL_ROLES
+
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        clients = {"anonymous": APIClient()}
+        for role in ALL_ROLES:
+            user = get_user_model().objects.create_user(f"probe_{role}")
+            user.groups.add(Group.objects.get(name=role))
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=user).key}")
+            clients[role] = client
+        table = {}
+        for path, item in sorted(schema["paths"].items()):
+            concrete = re.sub(r"\{[^}]+\}", "UNKNOWN-0", path)
+            for method in ("get", "post", "patch", "put", "delete"):
+                if method not in item:
+                    continue
+                statuses = {}
+                for who, client in clients.items():
+                    fn = getattr(client, method)
+                    resp = fn(concrete) if method == "get" else fn(concrete, {}, format="json")
+                    statuses[who] = resp.status_code
+                allowed = [w for w, code in statuses.items() if code not in (401, 403)]
+                table[f"{method.upper()} {path}"] = {"allowed": allowed, "statuses": statuses}
+        self.results["G_permissions"] = table
+
+    # C ---------------------------------------------------------------------------------------
     def stage_anomalies(self, api: Api):
         from datagen.models import REQUIRED_ISSUE_TYPES
 
@@ -758,7 +1153,7 @@ class Child:
             "by_type": per_type,
         }
 
-    # E ---------------------------------------------------------------------------------------
+    # D ---------------------------------------------------------------------------------------
     def stage_evaluation(self, api: Api):
         api.stage = "evaluation"
         a = self.results["A_dataset"]
@@ -803,7 +1198,7 @@ def run_child(*, out, seed, scale, scale_factor, config, log) -> None:
         child.stage_export()
         status["B_export"] = "PASS"
 
-        call_command("seed_roles", verbosity=0)
+        call_command("seed_roles", stdout=io.StringIO())  # groups only; no demo users
         user = get_user_model().objects.create_user("demo_platform_admin")
         user.groups.add(
             *__import__("django.contrib.auth.models", fromlist=["Group"]).Group.objects.filter(
@@ -829,6 +1224,12 @@ def run_child(*, out, seed, scale, scale_factor, config, log) -> None:
             child.say("E  API workflow (ARCHITECTURE §9.3 and exception paths)")
             child.stage_api(api)
             status["E_api"] = "PASS"
+            child.say("F  every remaining API operation (reads, writes, refusals)")
+            child.stage_reference(api)
+            status["F_reference"] = "PASS"
+        child.say("G  permission probe: every operation x every role")
+        child.stage_permissions()
+        status["G_permissions"] = "PASS"
     except Exception as exc:  # recorded, reported, and re-raised as a non-zero exit
         failed = next(s for s in STAGES if status[s] == "NOT RUN")
         status[failed] = "FAIL"
@@ -966,6 +1367,20 @@ def render_report(res: dict, transcript: list) -> str:
                 f"{x['request']['path']}` | {x['response']['status']} | {_code(x)} |"
                 for x in transcript
             ],
+            "",
+        ]
+    f = res.get("F_reference")
+    if f:
+        lines += ["## F. Every other API operation", ""]
+        lines += [f"- {k}: `{v}`" for k, v in f.items()] + [""]
+    g = res.get("G_permissions")
+    if g:
+        lines += [
+            "## G. Permissions (measured)",
+            "",
+            "| operation | allowed |",
+            "|---|---|",
+            *[f"| `{op}` | {', '.join(v['allowed'])} |" for op, v in g.items()],
             "",
         ]
     lines += [

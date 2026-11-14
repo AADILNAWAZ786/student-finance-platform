@@ -243,10 +243,12 @@ the Phase 8 export, and exits non-zero if any stage fails.
 
 - [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md): every field of the eleven challenge entities.
 - [`BUSINESS_RULES.md`](BUSINESS_RULES.md): every business rule with its code and tests.
+- [`API.md`](API.md): all 64 operations, rendered from the OpenAPI schema, the demo's captured
+  requests and responses and its measured role table (`datagen/apidoc.py`).
 - [`docs/project_documentation_audit.md`](docs/project_documentation_audit.md): the
   documentation and status audit.
 
-Still to come in Phase 9: `API.md`, `PROMPT.md`, the challenge acceptance matrix, a complete
+Still to come in Phase 9: `PROMPT.md`, the challenge acceptance matrix, a complete
 getting-started section and the Phase 9 verification results.
 
 ## Tests and quality
@@ -314,7 +316,8 @@ datagen/         Phase 7: rng (stage_rng), config, pipeline/ (engine = the servi
                  validation), services (generate), evaluation, digest, API, generate_data and
                  evaluate commands; config/generation.yaml. Phase 8: config_schema, provenance,
                  export, verification, reproducibility; export_data, verify_export and
-                 verify_reproducibility commands. Phase 9: demo (demo_workflow command)
+                 verify_reproducibility commands. Phase 9: demo (demo_workflow command),
+                 apidoc (renders API.md)
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
                  (Phases 1–6); workflow/ (§9.3 steps 1–11, step 11 on fixtures); architecture/;
                  unit/ (acceptance tests, all runnable); datagen/ (Phases 7–9); architecture/
@@ -325,10 +328,10 @@ tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, 
                  datagen_replay.py (the parity replay through the services)
 docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results,
                  phase6_sv_coverage.md, project_documentation_audit.md
-README.md CHANGELOG.md DATA_DICTIONARY.md BUSINESS_RULES.md   (repository root)
+README.md CHANGELOG.md DATA_DICTIONARY.md BUSINESS_RULES.md API.md   (repository root)
 output/          generated datasets and demo output (git-ignored)
 ```
 
-`DATA_DICTIONARY.md` and `BUSINESS_RULES.md` (and, when written, `API.md` and `PROMPT.md`) are
+`DATA_DICTIONARY.md`, `BUSINESS_RULES.md`, `API.md` (and, when written, `PROMPT.md`) are
 at the repository root at the project owner's instruction; the frozen ARCHITECTURE §3 layout
 places them under `docs/`.

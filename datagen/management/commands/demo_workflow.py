@@ -6,8 +6,9 @@
 
 The configured databases are never opened: the command writes a settings module for two new
 SQLite files inside <out>/run/, checks it in a subprocess, and runs every stage there (generate,
-reconcile, export, verify_export, the ARCHITECTURE §9.3 API scenario with its exception paths,
-the anomalies with their labels, the evaluation). A non-empty --out is refused. Results:
+reconcile, export, verify_export, the anomalies with their labels, the evaluation, the
+ARCHITECTURE §9.3 API scenario with its exception paths, every other API operation once, and a
+permission probe of every operation and role). A non-empty --out is refused. Results:
 <out>/demo_report.md, <out>/api_transcript.json, <out>/demo_results.json, <out>/export/.
 Exits non-zero when any stage fails.
 """

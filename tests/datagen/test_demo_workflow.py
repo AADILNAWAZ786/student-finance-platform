@@ -5,6 +5,8 @@ fails. Every run here is a real subprocess on new SQLite files under pytest's tm
 
 import hashlib
 import json
+import os
+import re
 import sqlite3
 from pathlib import Path
 
@@ -13,7 +15,7 @@ import yaml
 from django.core.management import CommandError, call_command
 from django.test import override_settings
 
-from datagen import demo
+from datagen import apidoc, demo
 from datagen.config import load_raw
 
 STARTER_EXPORT = "229335b44f7f8d96056e2e5ec60af4e2e9fb64191c4ce732af32e02cee578db1"
@@ -69,7 +71,7 @@ def test_every_stage_passes_and_the_figures_are_right(first):
     # evaluated before the API stage adds students: exactly the generated dataset (P9-O3)
     assert e["students"]["total"] == 100 and e["students"]["non_anomalous"] == 85
     assert e["students"]["pct_non_anomalous_reconciled"] == "100.00"
-    assert res["api_calls"] == 63 and res["api_refusals"] == 7
+    assert res["api_calls"] == 118 and res["api_refusals"] == 11
 
 
 def test_every_expected_refusal_is_captured_with_its_code(first):
@@ -86,6 +88,9 @@ def test_every_expected_refusal_is_captured_with_its_code(first):
         (422, "ALLOCATION_EXCEEDS_PAYMENT"),
         (422, "REFUND_EXCEEDS_CREDIT_BALANCE"),
         (409, "ILLEGAL_TRANSITION"),
+        (409, "INVOICE_HAS_ALLOCATIONS"),
+        (409, "DUPLICATE_PAYMENT"),
+        (409, "DATASET_NOT_FRESH"),
     }
     assert all(c["response"]["status"] == c["expected_status"] for c in calls)
 
@@ -100,7 +105,13 @@ def test_the_transcript_holds_no_credentials_and_masks_only_execution_times(firs
         for c in data["calls"]
     )
     assert all(set(c["request"]) == {"method", "path", "query", "body"} for c in data["calls"])
-    assert data["masked_keys"] == ["finished_at", "recorded_at", "started_at"]
+    assert data["masked_keys"] == [
+        "code_version",
+        "finished_at",
+        "recorded_at",
+        "sqlite_version",
+        "started_at",
+    ]
 
     def masked_keys(value, found):
         if isinstance(value, dict):
@@ -253,3 +264,70 @@ def test_full_scale_demo_gives_the_documented_ids(tmp_path):
         f"full-scale demo: {res['runtime_seconds']} s, peak {res['peak_rss_mb']} MB, "
         f"stages {res['timings']}"
     )
+
+
+# --- the API through the demo, and API.md --------------------------------------------------------
+
+
+def test_every_api_operation_is_exercised(first):
+    out, _ = first
+    calls = json.loads((out / "api_transcript.json").read_text())["calls"]
+    ops = apidoc.operations(apidoc.schema_dict())
+    assert len(ops) == 64
+    no_success = []
+    for method, path, _op in ops:
+        mine = [
+            c
+            for c in calls
+            if c["request"]["method"] == method and apidoc.matches(c["request"]["path"], path)
+        ]
+        assert mine, f"{method} {path} never called"
+        if not any(c["response"]["status"] < 300 for c in mine):
+            no_success.append(f"{method} {path}")
+    assert no_success == ["POST /api/v1/datagen/runs/"]  # needs empty databases (409 captured)
+
+
+def test_the_permission_probe_writes_nothing_and_matches_the_security_matrix(first):
+    _, res = first
+    table = res["G_permissions"]
+    assert len(table) == 64
+    for op, v in table.items():
+        for who, code in v["statuses"].items():
+            assert code < 500, (op, who, code)
+            assert op.startswith("GET") or code >= 400, (op, who, code)  # no write succeeded
+        if op != "GET /api/v1/health/":
+            assert "anonymous" not in v["allowed"] and "learner" not in v["allowed"], op
+    assert table["GET /api/v1/health/"]["allowed"][0] == "anonymous"
+    for op, v in table.items():  # authentication: 401 without credentials, 403 for a role
+        if op != "GET /api/v1/health/":
+            assert v["statuses"]["anonymous"] == 401, op
+        assert all(
+            code == 403
+            for who, code in v["statuses"].items()
+            if who != "anonymous" and who not in v["allowed"]
+        ), op
+    from tests.verification.test_verify_security import OPS  # independently written matrix
+
+    for _name, method, path, _body, roles in OPS:
+        key = next(
+            k
+            for k in table
+            if k.split(" ", 1)[0] == method.upper() and apidoc.matches(path, k.split(" ", 1)[1])
+        )
+        assert set(table[key]["allowed"]) == set(roles), key
+
+
+def test_api_md_is_rendered_from_the_schema_and_the_demo(first):
+    """API.md = render(schema, captured transcript, measured permissions); any difference fails.
+    After an intended change: SF_UPDATE_API_DOC=1 pytest -k api_md (then review the diff)."""
+    out, res = first
+    transcript = json.loads((out / "api_transcript.json").read_text())
+    rendered = apidoc.render(apidoc.schema_dict(), transcript, res)
+    path = Path(__file__).resolve().parents[2] / "API.md"
+    if os.environ.get("SF_UPDATE_API_DOC") == "1":
+        path.write_text(rendered, encoding="utf-8")
+    assert path.read_text(encoding="utf-8") == rendered
+    assert not re.search(r"\b[0-9a-f]{40}\b", rendered)  # no token or git SHA value
+    assert not re.search(r"(?i)(cookie|csrftoken|sessionid|password)[\"']?\s*[:=]", rendered)
+    headings = set(re.findall(r"^#### `(\w+ \S+)`$", rendered, re.M))
+    assert headings == {f"{m} {p}" for m, p, _ in apidoc.operations(apidoc.schema_dict())}

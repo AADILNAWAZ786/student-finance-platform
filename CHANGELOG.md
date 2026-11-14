@@ -17,9 +17,17 @@ review; not merged into `main`. Committed so far:
   any database outside its own run directory and a non-empty output directory.
 - `DATA_DICTIONARY.md` and `BUSINESS_RULES.md` at the repository root (owner's instruction;
   ARCHITECTURE §3 lists them under `docs/`), each checked against the code by a test.
+- `API.md` at the repository root: all 51 paths and 64 operations, rendered by
+  `datagen/apidoc.py` from the OpenAPI schema, the requests and responses `demo_workflow`
+  captured and its measured role table; a test re-renders it from a fresh demo run and
+  requires it unchanged. `demo_workflow` now also calls every remaining operation once and
+  probes every operation as every role (nothing written; tokens never recorded). The
+  masked transcript values are execution metadata only: `recorded_at`, `started_at`,
+  `finished_at`, `code_version` (git SHA) and the health check's `sqlite_version` (host
+  library).
 - `docs/project_documentation_audit.md`: the documentation and status audit.
 
-Still to come in Phase 9: `API.md`, `PROMPT.md`, the acceptance matrix, the README
+Still to come in Phase 9: `PROMPT.md`, the acceptance matrix, the README
 getting-started section and the Phase 9 verification results.
 
 ## Phase 8: full-scale tooling (merged into `main` through PR #1)
