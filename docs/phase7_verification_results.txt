@@ -1,0 +1,161 @@
+Phase 7 (data generation and evaluation): verification results
+=============================================================
+Date: 2026-11-14. Every result below was produced by running the real project.
+Base: branch phase6-reconciliation at efca9da10b56bdf578fc7af06adc00963ccee62d (pushed by the
+owner; verified before planning: parent d1bd07b, the 55 Phase 6 files byte-identical to the
+delivered PHASE6 manifest, clean tree, 2513 passed / 2 xfailed on a fresh clone with both
+interpreters). Work branch: phase7-datagen, created locally from efca9da. Nothing committed or
+pushed; main, phase5-withdrawals and phase6-reconciliation untouched.
+Approved plan: D-G1 … D-G6 and the Phase 7 / Phase 8 boundary (KNOWN_LIMITATIONS "Phase 7").
+Frozen docs (ARCHITECTURE.md, DATABASE_DESIGN.md v1.1) unchanged. Phase 1–6 app code unchanged
+apart from one URL include (config/urls.py) and one registered extension error code
+(core/exceptions.py: DATASET_NOT_FRESH, P7-O2).
+
+Environments: Python 3.14.6 (Django 5.2.19, DRF 3.18.3, drf-spectacular 0.30.0, pytest 9.2.0,
+ruff 0.17.4) and Python 3.12.3. manage.py always ran with scratch settings (databases in /tmp).
+
+1. Project checks (same result on 3.14.6 and 3.12.3)
+----------------------------------------------------
+manage.py check                                   System check identified no issues (0 silenced).
+manage.py makemigrations --check --dry-run        No changes detected
+manage.py spectacular --validate --fail-on-warn   exit 0, no warnings (64 operations; the
+                                                  3.14 and 3.12 schemas are byte-identical)
+ruff check . / ruff format --check . (0.17.4)     All checks passed! / 274 files already formatted
+
+2. Full regression, Phases 0–7 (README "Tests and quality" command, one interpreter at a time)
+----------------------------------------------------------------------------------------------
+    Python 3.14.6   2623 passed, 2 xfailed in 255.95s
+    Python 3.12.3   2623 passed, 2 xfailed in 260.73s
+Phase 6 baseline 2513; +110 = 81 new Phase 7 tests, +14 route-matrix cases (3 routes),
++15 replayed OpenAPI error examples. XFAIL (strict, unchanged): L1, L2.
+No Phase 0–6 test removed, skipped or weakened. Seven existing test files were extended for
+Phase 7 (P7-O12): router and isolation tests now expect exactly the label table in the
+ground-truth database; test_phase5_needs_no_migration also allows the ground-truth
+connection (makemigrations now inspects its history); routes 48 → 51; OpenAPI examples
++15; extension error codes 1 → 2.
+Note: running the two interpreters concurrently makes both fail with "disk I/O error" (they
+share the SQLite test database files); that is not a test result.
+
+3. test_stage_rng (the deferred acceptance test)                         8 passed
+------------------------------------------------
+Golden values (0.7898218038574595, 996729, 0.8254671368282721) recomputed from the documented
+algorithm on both interpreters; subprocesses under PYTHONHASHSEED 0, 1, 12345, random.
+
+4. Exact starter counts (DATABASE_DESIGN §7)               tests/datagen/test_generate_starter.py
+---------------------------------------------
+programs 20, terms 12, scholarship types 7, bridge 8, students 100, enrollments 300,
+invoices 300 (+3 injected = 303), eligibility 2,100, awards 150 (+3 = 153), payments 500,
+snapshots 400, labels 15 (3 per type). ≈ volumes (P7-O9): invoice lines 1,767 (+17),
+ledger 2,476 (+20), invoice events 1,086 (+6), payment allocations 1,892 (+3),
+refunds 22 (+3), refund events 66 (+9), scholarship allocations 187, scholarship events 460 (+6),
+student events 106, enrollment events 600, fee schedules 466 (456 V1 + 10 V2).
+Coverage (bands of DATABASE_DESIGN §7; generation fails outside them):
+    partial payments ≥ 20 %       52.00 %    overpayments 2–5 %        3.67 %
+    guardian 15–25 %              20.00 %    sponsor 5–15 %            10.00 %
+    waived lines 5–10 %           7.00 %     withdrawals 3–8 %         5.00 %
+    cancellations 0.5–1.5 %       1.00 %     late fees 8–15 %          11.00 %
+    full-ride awards (3–6)        6          SCHOLARSHIP_COVERED (≥ 3) 6
+Boundary cases (≥ 1 each at starter): payment = outstanding, ₹0.01 overpayment, withdrawal
+days 0/7/8/14/15/27/28, late fee ₹500 minimum and ₹5,000 maximum, scholarship exactly at
+cap, full ride covering registration, fully waived line, cancellation with registration owed.
+
+5. Baseline-only generation: zero findings                     tests/datagen/test_baseline.py
+-------------------------------------------
+No injection: the blind run (triggered_by DATAGEN, as of 2026-12-31) executed all 63 checks:
+0 findings, 100 / 100 students reconciled (BR-BAL-02). The checks read the rows
+(e.g. S-ID-GAPS-*, A-LINE-AMOUNTS, B-IDENTITY, A-LATE-FEE, A-ELIGIBILITY, A-EXIT-ADJUSTMENTS
+all report records_checked > 0). No check was changed or weakened.
+
+6. Anomalies, labels and evaluation        test_generate_starter.py, test_injection.py, unit
+-----------------------------------
+                                    labels  TP  FP  FN  precision  recall   F1
+    PAYMENT_OVER_ALLOCATED               3   3   0   0  1.0000     1.0000   1.0000
+    SCHOLARSHIP_EXCEEDS_ELIGIBLE_FEES    3   3   0   0  1.0000     1.0000   1.0000
+    DUPLICATE_INVOICE                    3   3   0   0  1.0000     1.0000   1.0000
+    REFUND_EXCEEDS_NET_PAID              3   3   0   0  1.0000     1.0000   1.0000
+    BALANCE_LEDGER_MISMATCH              3   3   0   0  1.0000     1.0000   1.0000
+18 findings = 15 TP + 3 consequential (each injected refund's source payment is
+over-allocated, P6-O3; linked through the label's related_ids, D-G4) + 0 unexpected.
+Non-anomalous students: 85, all reconciled (100.00 %). meets_targets = true.
+Labels checked against the rows actually injected: method (APPEND / MODIFY), entity, rule,
+decision, record_id convention (payment / award / the later duplicate invoice / refund /
+snapshot), related_ids, expected and injected values; one anomaly per student; labels
+GT-2026-000001…000015. Unrelated rows not corrupted (R-27): the injected world equals the
+baseline world on every baseline record; the only differences are the injected records and
+the labelled students' snapshots (taken after injection, §11.2 stage 15).
+Metric arithmetic, by hand (tests/unit/test_evaluation_metrics.py, 10 tests):
+TP2/FP1/FN1 → P = R = F1 = 0.6667; TP3/FP1/FN2 → P 0.7500, R 0.6000, F1 0.6667; consequential
+vs false positive; repeated finding; unexpected non-required types; 0/0 → null; all wrong →
+0.0000; non-anomalous reconciliation 8 / 9 = 88.89 %.
+
+7. Determinism (D-G2)                                       tests/datagen/test_determinism.py
+---------------------
+seed 20261022, starter, config_hash acbe9c9ab9503071421c568056828ab666b77ad1b5c2474ff47fc8e0fd0a45c6
+    dataset checksum  c02689f549860eb8f886011f899804a71abecc481d8df0e7ebb02a6eead7b7e3
+    label checksum    160a7733fabff5d708aa3c71abed5b032991a642411b5fe2d643670a14ab4010
+Identical in two runs (table by table), under PYTHONHASHSEED 0 / 1 / 12345 / random, and on
+Python 3.14.6 and 3.12.3 (8 of 8 runs; pinned as golden values, asserted on both). Another
+seed: other data and labels, same exact volumes, same config hash. Planning makes no
+database access. Stored rows: database checksums = planned checksums = GenerationRun.checksums.
+
+8. Parity with the services (D-G1)                               tests/datagen/test_parity.py
+----------------------------------
+All 2,685 baseline operations replayed through the real Phase 1–6 services, in order:
+all 23 domain tables identical to the generator's output, row for row, IDs included.
+
+9. Ground-truth isolation and routing                          tests/datagen/test_isolation.py
+-------------------------------------
+Label table only in ground_truth.sqlite3; GenerationRun only in default. Only
+datagen/evaluation.py touches findings; the generator never imports detector internals;
+the frozen AST import rule (tests/architecture) green. No GT key in IdSequence, no label
+table in GenerationRun row_counts / checksums. The detector, run with every use of the
+ground_truth connection made to fail, completes with exactly the same findings.
+
+10. Transactions and freshness (D-G5, D-G6)                tests/datagen/test_transactions.py
+-------------------------------------------
+Label write fails after all domain rows were written → both databases empty. Domain commit
+fails after the labels committed → labels only; next generation refused
+(DATASET_NOT_FRESH, ground_truth:datagen_groundtruthlabel); after restoring both databases
+generation succeeds. Any domain row, or a previous run, refuses generation (409); no force.
+
+11. Commands and API                                tests/datagen/test_commands_and_api.py
+--------------------
+generate_data (2.2 s end to end at starter scale) and evaluate (writes
+evaluation_report.json). /api/v1/datagen/runs/ list / create / detail and …/evaluation/:
+platform_admin only (the 4 other roles 403, anonymous 401); POST → 201 with run,
+reconciliation run and evaluation; second POST → 409; scale "full" → 400; a STUDENT-scope run
+→ 400. 15 documented error examples replayed live (tests/verification).
+
+12. Migration rehearsal on a populated Phase 6 database
+--------------------------------------------------------
+A Phase 5 database built through the d1bd07b services (30 students, 255 ledger entries, …),
+migrated and used with the efca9da code (120 snapshots, RECON-2026-000001: 0 findings).
+A fresh copy, migrated with the Phase 7 tree:
+    migrate                          Applying datagen.0001_initial... OK
+    migrate --database=ground_truth  Applying datagen.0001_initial... OK
+    default: +1 empty table (datagen_generationrun); Django +2 content types, +8 permissions;
+             every other table identical; integrity_check ok; foreign_key_check clean
+    ground_truth: +1 empty table (datagen_groundtruthlabel)
+    generate_data → refused (DATASET_NOT_FRESH); evaluate → "No generation run found";
+    run_reconciliation → COMPLETED, 0 findings, 30/30 reconciled
+    rollback: migrate datagen zero (both databases) → Unapplying datagen.0001_initial... OK;
+             no datagen table left; ground_truth identical to the Phase 6 copy; every domain
+             table identical to the Phase 6 copy; re-apply OK
+A fresh empty database created with the efca9da code, then migrated with the Phase 7 tree:
+generate_data → GEN-2026-0001, 15 labels, RECON-2026-000001 18 findings, meets_targets True;
+stored dataset checksum = the golden c02689f5…; rollback leaves no datagen table.
+Merge rehearsal: a fresh checkout of efca9da + the ZIP → manifest OK, tree identical to the
+working tree, gates and the full suite green there (see PHASE7_VERIFY.md).
+
+13. Decisions and observations
+------------------------------
+Approved D-G1 … D-G6, implemented as approved. P7-O1 … P7-O12 in KNOWN_LIMITATIONS.md
+(Phase 8 boundary; DATASET_NOT_FRESH; commit-order recovery; label checksum not stored in
+the domain database; one recorded_at; BR-ALC-06 not exercised by the baseline; generation
+assumptions; starter-scaled count targets; ≈ volumes; migration rollback; vacuous targets;
+extended tests). Defects fixed before delivery: P7-B1, P7-B2.
+
+14. Local databases (never opened)
+----------------------------------
+    db.sqlite3            131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f
+    ground_truth.sqlite3  ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20

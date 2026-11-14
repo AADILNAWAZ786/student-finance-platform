@@ -1,4 +1,4 @@
-"""V-ROUTE: every Phase 1–5 URL × every HTTP method (actual routes from the URL resolver).
+"""V-ROUTE: every Phase 1–7 URL × every HTTP method (actual routes from the URL resolver).
 
 Allowed methods must not return 405; every other method must return the documented
 405 envelope with an ``Allow`` header. Unknown or malformed URLs under /api/ must also
@@ -70,6 +70,10 @@ ROUTES = [
     ("reconciliation-run", "/api/v1/reconciliation/runs/RECON-2026-000001/", {"GET"}),
     ("anomalies", "/api/v1/anomalies/", {"GET"}),
     ("anomaly", "/api/v1/anomalies/FND-2026-000001/", {"GET"}),
+    # Phase 7: data generation and evaluation (platform_admin only; read + action)
+    ("datagen-runs", "/api/v1/datagen/runs/", {"GET", "POST"}),
+    ("datagen-run", "/api/v1/datagen/runs/GEN-2026-0001/", {"GET"}),
+    ("datagen-run-evaluation", "/api/v1/datagen/runs/GEN-2026-0001/evaluation/", {"GET"}),
 ]
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 DISALLOWED = [
@@ -107,8 +111,9 @@ def test_route_table_matches_resolver():
                 yield prefix + str(p.pattern)
 
     api = sorted(r for r in walk(get_resolver()) if r.startswith("api/v1/"))
-    # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11, Phase 5: +2, Phase 6: +6
-    assert len(api) == len(ROUTES) == 48
+    # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11, Phase 5: +2, Phase 6: +6,
+    # Phase 7: +3
+    assert len(api) == len(ROUTES) == 51
 
 
 @pytest.mark.parametrize(

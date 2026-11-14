@@ -129,6 +129,15 @@ OPERATIONS = {
     "balance_snapshots_list": ("get", "/api/v1/balance-snapshots/", None),
     "balance_snapshots_create": ("post", "/api/v1/balance-snapshots/", {}),
     "balance_snapshots_retrieve": ("get", "/api/v1/balance-snapshots/SNAP-2026-000001/", None),
+    # Phase 7: data generation and evaluation (platform_admin only)
+    "datagen_runs_list": ("get", "/api/v1/datagen/runs/", None),
+    "datagen_runs_create": ("post", "/api/v1/datagen/runs/", {}),
+    "datagen_runs_retrieve": ("get", "/api/v1/datagen/runs/GEN-2026-0001/", None),
+    "datagen_runs_evaluation_retrieve": (
+        "get",
+        "/api/v1/datagen/runs/GEN-2026-0001/evaluation/",
+        None,
+    ),
 }
 
 TERM_2027 = {
@@ -1044,6 +1053,52 @@ PHASE6_SPECIFIC = {
 SPECIFIC.update(PHASE6_SPECIFIC)
 
 
+# --- Phase 7 recipes: datagen (platform_admin; the world is not fresh and has no generation run)
+GEN_RUNS = "/api/v1/datagen/runs/"
+BILLING_OPERATIONS.add("datagen_runs_list")
+
+
+def _generation_run():
+    from django.utils import timezone
+
+    from datagen.models import GenerationRun
+
+    GenerationRun.objects.create(
+        run_id="GEN-2026-0001",
+        seed=20261022,
+        scale_name="starter",
+        scale_factor=Decimal("0.0100"),
+        config_hash="0" * 64,
+        row_counts={},
+        checksums={},
+        started_at=timezone.now(),
+    )
+    return f"{GEN_RUNS}GEN-2026-0001/evaluation/"
+
+
+PHASE7_SPECIFIC = {
+    ("datagen_runs_create", 400, "Full scale requested through the API"): lambda w: w.finance.post(
+        GEN_RUNS, {"scale": "full"}, format="json"
+    ),
+    ("datagen_runs_create", 409, "Databases not fresh"): lambda w: w.finance.post(
+        GEN_RUNS, {"scale": "starter"}, format="json"
+    ),
+    ("datagen_runs_retrieve", 404, "Unknown GenerationRun"): lambda w: w.finance.get(
+        f"{GEN_RUNS}GEN-2026-9999/"
+    ),
+    ("datagen_runs_evaluation_retrieve", 404, "Unknown GenerationRun"): lambda w: w.finance.get(
+        f"{GEN_RUNS}GEN-2026-9999/evaluation/", {"reconciliation_run": "RECON-2026-000001"}
+    ),
+    ("datagen_runs_evaluation_retrieve", 400, "reconciliation_run missing"): lambda w: (
+        w.finance.get(_generation_run())
+    ),
+    ("datagen_runs_evaluation_retrieve", 400, "Unknown reconciliation run"): lambda w: (
+        w.finance.get(_generation_run(), {"reconciliation_run": "RECON-2026-999999"})
+    ),
+}
+SPECIFIC.update(PHASE7_SPECIFIC)
+
+
 def _recipe(op_id, status, summary):
     if (op_id, status, summary) in SPECIFIC:
         return SPECIFIC[(op_id, status, summary)]
@@ -1126,7 +1181,8 @@ def test_documented_examples_were_found():
     # Phase 4 "Reason other than OVERPAYMENT" one, which is now valid input)
     # Phase 6 reconciliation 28: runs list 4, create 4, retrieve 3; anomalies list 4,
     # retrieve 3; balance snapshots list 4, create 3, retrieve 3
-    assert len(EXAMPLES) == 56 + 56 + 36 + 61 + 12 + 28
+    # Phase 7 datagen 15: runs list 3, create 4, retrieve 3, evaluation 5
+    assert len(EXAMPLES) == 56 + 56 + 36 + 61 + 12 + 28 + 15
     assert {op for op, *_ in EXAMPLES} >= set(OPERATIONS) | {"health_check"}
 
 
@@ -1161,6 +1217,7 @@ RESOURCE_OF = {
     "reconciliation": "ReconciliationRun",
     "anomalies": "AnomalyFinding",
     "balance-snapshots": "BalanceSnapshot",
+    "datagen": "GenerationRun",
 }
 
 

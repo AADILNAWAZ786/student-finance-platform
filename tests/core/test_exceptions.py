@@ -47,10 +47,14 @@ def test_documented_codes_are_exactly_the_frozen_catalogue():
 
 
 def test_the_only_extension_is_the_approved_phase4_code():
-    """D-P13a / P4-O2: one approved exception to the 18-code catalogue, nothing else."""
-    assert EXTENSION_DOMAIN_ERROR_CODES == {"ALLOCATION_LIMIT_REACHED": 409}
+    """D-P13a / P4-O2 and D-G6 (Phase 7): the two approved exceptions to the 18-code
+    catalogue, nothing else."""
+    assert EXTENSION_DOMAIN_ERROR_CODES == {
+        "ALLOCATION_LIMIT_REACHED": 409,
+        "DATASET_NOT_FRESH": 409,  # Phase 7, decision D-G6
+    }
     assert DOMAIN_ERROR_CODES == {**DOCUMENTED_DOMAIN_ERROR_CODES, **EXTENSION_DOMAIN_ERROR_CODES}
-    assert len(DOMAIN_ERROR_CODES) == 19
+    assert len(DOMAIN_ERROR_CODES) == 20
     e = domain_error("ALLOCATION_LIMIT_REACHED", "full")
     assert isinstance(e, StateConflict) and e.status_code == 409
 

@@ -1,0 +1,121 @@
+# Synthetic data generation config (ARCHITECTURE §11, DATABASE_DESIGN §7).
+#
+# Dataset content depends only on: seed + this resolved config + code (ARCHITECTURE P4).
+# config_hash = SHA-256 of the canonical JSON of the *resolved* config (sorted keys, no
+# whitespace). Changing any value here changes the hash and the data.
+#
+# Volumes below are FULL-scale baseline targets (DATABASE_DESIGN §7). A scale factor
+# multiplies the transactional volumes (students, payments, award quota, anomalies);
+# master data always stays full size (ARCHITECTURE §11.4: 20 programs, 12 terms, 7 types).
+
+seed: 20261022
+as_of_date: "2026-12-31"           # ARCHITECTURE D7: no business event after it
+actor: datagen                     # DATABASE_DESIGN §3 StatusEventBase.actor
+
+scales:
+  starter: 0.01                    # 1 % of transactional volume
+  full: 1.0
+
+volumes:                           # full-scale exact targets (DATABASE_DESIGN §7)
+  students: 10000
+  payments: 50000
+  awards_per_term: 5000            # D12 ranked quota (generation policy only)
+  anomalies_per_type: 150          # 3 per type at starter scale
+  anomalies_min_per_type: 3        # ARCHITECTURE §11.4
+
+# --- master data ---------------------------------------------------------------------------
+# 20 programs: 8 STEM, 12 with a lab (DATABASE_DESIGN §3 Program). tuition = INR per credit
+# for a DOMESTIC student in SPRING (DATABASE_DESIGN §3 "Pricing").
+programs:
+  - {code: BSC-CS,   name: BSc Computer Science,        level: UG,      department: Computing,           stem: true,  lab: true,  min: 12, max: 20, tuition: 10000}
+  - {code: BSC-DS,   name: BSc Data Science,            level: UG,      department: Computing,           stem: true,  lab: true,  min: 12, max: 20, tuition: 10500}
+  - {code: BTECH-ME, name: BTech Mechanical Engineering, level: UG,     department: Engineering,         stem: true,  lab: true,  min: 15, max: 24, tuition: 11000}
+  - {code: BTECH-EE, name: BTech Electrical Engineering, level: UG,     department: Engineering,         stem: true,  lab: true,  min: 15, max: 24, tuition: 11500}
+  - {code: BSC-BIO,  name: BSc Biotechnology,           level: UG,      department: Life Sciences,       stem: true,  lab: true,  min: 12, max: 20, tuition: 9000}
+  - {code: BSC-CHEM, name: BSc Chemistry,               level: UG,      department: Physical Sciences,   stem: true,  lab: true,  min: 12, max: 20, tuition: 8000}
+  - {code: MSC-AI,   name: MSc Artificial Intelligence, level: PG,      department: Computing,           stem: true,  lab: true,  min: 9,  max: 18, tuition: 12000}
+  - {code: MTECH-CE, name: MTech Civil Engineering,     level: PG,      department: Engineering,         stem: true,  lab: true,  min: 9,  max: 18, tuition: 11000}
+  - {code: BDES-ID,  name: BDes Industrial Design,      level: UG,      department: Design,              stem: false, lab: true,  min: 12, max: 20, tuition: 9500}
+  - {code: BARCH,    name: Bachelor of Architecture,    level: UG,      department: Design,              stem: false, lab: true,  min: 15, max: 24, tuition: 9000}
+  - {code: BPHARM,   name: Bachelor of Pharmacy,        level: UG,      department: Health Sciences,     stem: false, lab: true,  min: 12, max: 20, tuition: 8500}
+  - {code: DIP-LAB,  name: Diploma in Lab Technology,   level: DIPLOMA, department: Health Sciences,     stem: false, lab: true,  min: 6,  max: 12, tuition: 4000}
+  - {code: BCOM,     name: BCom Accounting,             level: UG,      department: Commerce,            stem: false, lab: false, min: 12, max: 20, tuition: 5000}
+  - {code: BBA,      name: Bachelor of Business Admin,  level: UG,      department: Management,          stem: false, lab: false, min: 12, max: 20, tuition: 6500}
+  - {code: BA-ECO,   name: BA Economics,                level: UG,      department: Social Sciences,     stem: false, lab: false, min: 12, max: 20, tuition: 4500}
+  - {code: BA-ENG,   name: BA English Literature,       level: UG,      department: Humanities,          stem: false, lab: false, min: 12, max: 20, tuition: 3000}
+  - {code: LLB,      name: Bachelor of Laws,            level: UG,      department: Law,                 stem: false, lab: false, min: 12, max: 20, tuition: 7000}
+  - {code: MBA,      name: Master of Business Admin,    level: PG,      department: Management,          stem: false, lab: false, min: 9,  max: 18, tuition: 12000}
+  - {code: MA-PSY,   name: MA Psychology,               level: PG,      department: Social Sciences,     stem: false, lab: false, min: 9,  max: 18, tuition: 6000}
+  - {code: DIP-ACC,  name: Diploma in Accounting,       level: DIPLOMA, department: Commerce,            stem: false, lab: false, min: 6,  max: 12, tuition: 3500}
+
+fees:                              # FLAT INR per term (residency ALL unless noted)
+  LAB: 12000                       # only programs with a lab (BR-FEE-04)
+  REGISTRATION: 5000
+  TECHNOLOGY: 4000
+  LIBRARY: 2000
+  STUDENT_ACTIVITY: 3000
+  INTERNATIONAL_SERVICE: 15000     # residency INTERNATIONAL only
+  effective_from: "2026-01-01"
+pricing:
+  international_tuition_multiplier: "1.6"
+  season_tuition_multiplier: {SPRING: "1.00", SUMMER: "1.00", FALL: "1.04"}
+  fall_tuition_v2:                 # BR-FEE-03 versioning exercise (DATABASE_DESIGN §3)
+    count: 10
+    effective_from: "2026-08-01"   # before the 17 Aug FALL invoice date
+    increase: "1.03"
+
+# --- students ------------------------------------------------------------------------------
+students:
+  international_share: "0.15"
+  full_ride_share: "0.015"         # 100–200 of 10,000 → 300–600 full-ride awards
+  first_term_admit_share: "0.25"   # admitted TERM-2026-SPRING; the rest in 2023–2025 terms
+  hold_share: "0.025"              # ACTIVE → ON_HOLD → ACTIVE
+  age_at_admit: [17, 30]
+  gpa: {mean: 3.0, sd: 0.5, min: 0.0, max: 4.0}
+  need_index_beta: [2, 3]
+  created_on: "2026-01-01"
+  first_names: [Aarav, Aditi, Akash, Ananya, Arjun, Bhavna, Chetan, Deepa, Divya, Farhan, Gauri, Harsh, Isha, Ishaan, Jaya, Karan, Kavya, Lakshmi, Manav, Meera, Neha, Nikhil, Pooja, Pranav, Priya, Rahul, Riya, Rohan, Sahil, Sana, Shreya, Siddharth, Sneha, Tanvi, Uday, Varun, Vidya, Yash, Zara, Kabir]
+  last_names: [Agarwal, Banerjee, Bhat, Chopra, Das, Desai, Fernandes, Ghosh, Gupta, Iyer, Jain, Joshi, Kapoor, Khan, Kulkarni, Menon, Mishra, Nair, Patel, Pillai, Rao, Reddy, Saxena, Shah, Sharma, Singh, Sinha, Thomas, Verma, Yadav]
+
+# --- billing behaviour (coverage targets: DATABASE_DESIGN §7) --------------------------------
+enrollment:
+  days_before_invoice: [0, 4]      # enrolled_on = invoice_date − d (never before 2026-01-01)
+waivers:
+  invoice_share: "0.07"            # waived lines on 5–10 % of invoices
+  reasons: [STAFF_DEPENDENT, HARDSHIP, PG_ACTIVITY_EXEMPT, SPONSOR_AGREEMENT]
+exits:
+  withdrawal_share: "0.05"         # 3–8 % of enrollments
+  cancellation_share: "0.01"       # 0.5–1.5 %
+  boundary_days: [0, 7, 8, 14, 15, 27, 28]   # ARCHITECTURE §11.2 boundary cases
+  max_withdrawal_day: 60
+payments:
+  profiles:                        # share of payable students (exact quotas)
+    FULL: "0.50"
+    INSTALMENTS: "0.39"
+    PARTIAL: "0.04"
+    LATE: "0.04"
+    PARTIAL_SMALL: "0.02"          # leaves < 25,000 open → the ₹500 late-fee minimum
+    LATE_LARGE: "0.01"             # the largest invoices, unpaid past grace → ₹5,000 maximum
+  overpayment_invoice_share: "0.035"   # 2–5 % of invoices
+  partial_fraction: ["0.50", "0.90"]
+  overpay_extra: [500, 15000]
+  payer_mix: {SELF: "0.70", GUARDIAN: "0.20", SPONSOR: "0.10"}
+  methods:
+    SELF: [UPI, CARD, CASH]
+    GUARDIAN: [BANK_TRANSFER, UPI, CHEQUE]
+    SPONSOR: [SPONSOR_TRANSFER, BANK_TRANSFER]
+  instalments: [2, 3]
+  late_window_days: [1, 25]        # LATE payments: after the late-fee date
+refunds:
+  overpayment_refund_share: "0.60"
+  request_after_days: [1, 5]
+  approve_after_days: [1, 3]
+  process_after_days: [1, 5]
+snapshots: ["2026-05-09", "2026-08-15", "2026-12-19", "2026-12-31"]
+
+# --- anomaly injection (DATABASE_DESIGN §7 methods) ----------------------------------------
+anomalies:
+  over_allocation_amount: [500, 5000]
+  scholarship_overaward_factor: ["1.05", "1.50"]
+  refund_excess: [1000, 20000]
+  balance_delta: [500, 25000]

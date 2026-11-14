@@ -55,4 +55,8 @@ def test_migrated_test_databases_are_isolated():
     default_tables = set(connections["default"].introspection.table_names())
     gt_tables = set(connections["ground_truth"].introspection.table_names())
     assert {"auth_user", "core_idsequence", "authtoken_token"} <= default_tables
-    assert gt_tables == {"django_migrations"}  # GroundTruthLabel arrives in Phase 7
+    # Phase 7: GroundTruthLabel is the only model table in the ground-truth database, and the
+    # domain database has no label table (ARCHITECTURE §12.2.1)
+    assert gt_tables == {"django_migrations", "datagen_groundtruthlabel"}
+    assert "datagen_groundtruthlabel" not in default_tables
+    assert "datagen_generationrun" in default_tables

@@ -5,7 +5,7 @@ and reconcile student balances. Django 5.2 LTS + Django REST Framework + SQLite.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) (v1.1, frozen).
 
-**Status: Phase 6, reconciliation** (on top of Phase 1: students, programs, terms,
+**Status: Phase 7, data generation and evaluation** (on top of Phase 1: students, programs, terms,
 enrollments; Phase 2: fee schedules, invoices, waivers, statuses, void, late fees, the ledger
 and the student ledger, statement and balance views; Phase 3: scholarship types, eligibility,
 awards and their application). Phase 4 adds payments from any payer (each posting one PAYMENT
@@ -24,8 +24,12 @@ detector that runs every ARCHITECTURE §12.1 check (structural, relationship, te
 lifecycle, arithmetic, the five required anomaly types, and the per-student balance identity
 BR-BAL-02), re-checks every service-layer rule of the design
 ([`docs/phase6_sv_coverage.md`](docs/phase6_sv_coverage.md)), and stores what it finds as
-findings, without ever changing domain data. The data
-generator and its evaluation (Phase 7) are not implemented yet.
+findings, without ever changing domain data. Phase 7 adds the synthetic data generator
+(ARCHITECTURE §11): a deterministic in-memory pipeline that builds the starter-scale dataset
+with the domain calculators (identical, row for row, to replaying the same operations through
+the services), injects the five required anomaly types with ground-truth labels kept in their
+own database, runs the blind detector and evaluates it (precision / recall / F1 per type).
+Full-scale volumes, exports, manifests and `verify_reproducibility` are Phase 8.
 
 Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
 
@@ -36,7 +40,8 @@ Billing, scholarship, payment and refund data (Phases 2–5) is readable by `pla
 `support_staff` only; support staff may also request a refund. Withdrawals and cancellations
 may be performed by `platform_admin` and `academic_admin`; only `platform_admin` sees their
 financial details. Reconciliation runs and snapshots are `platform_admin` only; runs, findings
-and snapshots are readable by `platform_admin` and `support_staff`.
+and snapshots are readable by `platform_admin` and `support_staff`. Data generation and
+evaluation are `platform_admin` only.
 See [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md).
 
 ## Quick start
@@ -160,13 +165,34 @@ Command (same engine): `python manage.py run_reconciliation --as-of 2026-12-31
 snapshot: writes that overlap a run can show up as findings on the records being written;
 re-run once they finish (see KNOWN_LIMITATIONS, D-R2).
 
+### Data generation and evaluation (Phase 7)
+
+```bash
+# both databases must be freshly migrated and empty (refused otherwise, no force option)
+python manage.py migrate && python manage.py migrate --database=ground_truth
+python manage.py generate_data --seed 20261022 --scale starter
+python manage.py evaluate --out output/starter/reports/evaluation_report.json
+```
+
+`generate_data` builds 100 students, 300 enrollments and invoices, 2,100 eligibility rows, 150
+awards, 500 payments and 400 snapshots exactly (DATABASE_DESIGN §7), injects 3 anomalies of
+each required type (labels in `ground_truth.sqlite3` only), runs the detector
+(`triggered_by = DATAGEN`) and prints precision / recall / F1 per type. Same seed + same
+`config/generation.yaml` → the same rows, labels and checksums on Python 3.12 and 3.14.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/datagen/runs/` | `{scale: "starter", seed?}`; synchronous; 201 with the run, its reconciliation run and the evaluation; 409 `DATASET_NOT_FRESH` unless both databases are empty |
+| GET | `/api/v1/datagen/runs/`, `/api/v1/datagen/runs/{id}/` | seed, scale, config hash, row counts, checksums (never labels) |
+| GET | `/api/v1/datagen/runs/{id}/evaluation/?reconciliation_run=` | precision / recall / F1 per type, consequential and unexpected findings (COMPLETED ALL-scope runs only) |
+
 ## Tests and quality
 
-Everything implemented so far (Phases 0–6), including the runnable unit tests:
+Everything implemented so far (Phases 0–7), including every unit test:
 
 ```bash
 .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services \
-    tests/api tests/commands tests/verification tests/workflow \
+    tests/api tests/commands tests/verification tests/workflow tests/datagen \
     tests/unit/test_invoice_status.py tests/unit/test_invoice_lifecycle.py \
     tests/unit/test_fee_schedule_versions.py tests/unit/test_billing_calculators.py \
     tests/unit/test_full_ride_scholarship.py tests/unit/test_scholarship_calculators.py \
@@ -174,15 +200,15 @@ Everything implemented so far (Phases 0–6), including the runnable unit tests:
     tests/unit/test_withdrawal_calculators.py tests/unit/test_withdrawal_refund_pct.py \
     tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py \
     tests/unit/test_reconciliation_checks.py tests/unit/test_reconciliation_sv_rules.py \
-    tests/unit/test_reconciliation_counter_gaps.py -rxX
-#   2513 passed, 2 xfailed (the two blocked rules)
+    tests/unit/test_reconciliation_counter_gaps.py tests/unit/test_stage_rng.py \
+    tests/unit/test_evaluation_metrics.py tests/unit/test_datagen_config.py -rxX
+#   2623 passed, 2 xfailed (the two blocked rules)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-`tests/unit/test_stage_rng.py` is the acceptance test for the data generator (Phase 7,
-ARCHITECTURE §14). It cannot be imported until its module exists, so a bare `pytest` (all of
-`tests/`) stops at collection ("Interrupted: 1 error during collection"). That is expected;
-use the command above.
+`tests/unit/test_stage_rng.py`, the acceptance test for the data generator (ARCHITECTURE
+§14), now runs with the rest. Run the suite on one interpreter at a time: two concurrent runs
+share the SQLite test database files.
 
 `tests/verification/` is the API verification suite: every endpoint and method, roles,
 ground-truth isolation, health outages, rollback, determinism, migration safety, concurrency,
@@ -192,7 +218,8 @@ and every response validated against the OpenAPI schema. Results:
 [`docs/phase3_verification_results.txt`](docs/phase3_verification_results.txt),
 [`docs/phase4_verification_results.txt`](docs/phase4_verification_results.txt),
 [`docs/phase5_verification_results.txt`](docs/phase5_verification_results.txt),
-[`docs/phase6_verification_results.txt`](docs/phase6_verification_results.txt).
+[`docs/phase6_verification_results.txt`](docs/phase6_verification_results.txt),
+[`docs/phase7_verification_results.txt`](docs/phase7_verification_results.txt).
 
 ## Layout
 
@@ -212,11 +239,15 @@ payments/        Phase 4: models, calculators (pure), lifecycle, policy, service
 reconciliation/  Phase 6: models, calculators (pure; reuse the domain calculators), checks/
                  (one module per §12.1 family), dataset + loader (default DB only), engine,
                  services, API, read-only admin, run_reconciliation command
-datagen/         registered app skeleton; arrives in Phase 7
+datagen/         Phase 7: rng (stage_rng), config, pipeline/ (engine = the services' steps on
+                 in-memory records, scenario = stages 1–13, injector, materialize = stage 17,
+                 validation), services (generate), evaluation, digest, API, generate_data and
+                 evaluate commands; config/generation.yaml
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
                  (Phases 1–6); workflow/ (§9.3 steps 1–11, step 11 on fixtures); architecture/;
-                 unit/ (acceptance tests; 14 runnable now, 1 for Phase 7); billing_fixtures.py,
+                 unit/ (acceptance tests, all runnable); datagen/ (Phase 7); billing_fixtures.py,
                  scholarship_fixtures.py, payment_fixtures.py, reconciliation_fixtures.py (a clean
-                 world built through the services, and a test-only anomaly injector)
+                 world built through the services, and a test-only anomaly injector),
+                 datagen_replay.py (the parity replay through the services)
 docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results
 ```

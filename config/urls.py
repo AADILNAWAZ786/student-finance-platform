@@ -25,6 +25,7 @@ api_v1 = [
     path("", include("scholarships.urls")),
     path("", include("payments.urls")),
     path("", include("reconciliation.urls")),
+    path("", include("datagen.urls")),
 ]
 
 urlpatterns = [

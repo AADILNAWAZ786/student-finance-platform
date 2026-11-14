@@ -45,7 +45,10 @@ BANDS = [
 ]
 
 
-def test_phase5_needs_no_migration(db):
+@pytest.mark.django_db(databases=["default", "ground_truth"])
+def test_phase5_needs_no_migration():
+    # since Phase 7 a model lives in the ground-truth database, so makemigrations also
+    # checks that database's migration history
     out = io.StringIO()
     call_command("makemigrations", "--check", "--dry-run", stdout=out)
     assert "No changes detected" in out.getvalue()

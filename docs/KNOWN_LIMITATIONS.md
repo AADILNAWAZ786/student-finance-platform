@@ -1,6 +1,6 @@
-# Known limitations (unresolved) and Phase 2–6 policy decisions
+# Known limitations (unresolved) and Phase 2–7 policy decisions
 
-Status as of the Phase 6 (reconciliation) delivery (2026-11-14). L1 and L2 are **not
+Status as of the Phase 7 (data generation and evaluation) delivery (2026-11-14). L1 and L2 are **not
 implemented**.
 The frozen design documents (`ARCHITECTURE.md`, `DATABASE_DESIGN.md` v1.1) are unchanged;
 resolving L1/L2 needs a design decision by the project owner.
@@ -31,6 +31,41 @@ resolving L1/L2 needs a design decision by the project owner.
 **Resolving L1 and L2** needs a model addition, for example an optional one-to-one
 `Student.user` and an instructor↔program bridge table. That changes the frozen design, so it
 was not done in Phase 1.
+
+## Phase 7 policy decisions (approved before implementation)
+
+| # | Decision | Implemented as |
+|---|---|---|
+| D-G1 | Generation engine | The frozen design (ARCHITECTURE §5, §11.2): `datagen/pipeline/engine.py` mirrors each Phase 1–5 service step by step on in-memory records, using only the domain calculators and lifecycle tables; temporary keys; stage-17 ID materialization; `bulk_create`. Parity: `tests/datagen/test_parity.py` replays all 2,685 baseline operations through the real services and gets identical tables, row for row, IDs included (23 tables). |
+| D-G2 | Checksums and cross-version determinism | Canonical SHA-256 per table (rows as sorted-key JSON lines, ordered by PK, decimals with their field's places) excluding only `recorded_at` and run `started_at` / `finished_at`; a combined dataset digest; a separate label checksum. Randomness uses only `random()` / `randrange()` / `randint()` of `stage_rng`; distributions are built from them. Pinned golden digests pass on Python 3.14.6 and 3.12.3 and under four `PYTHONHASHSEED` values. |
+| D-G3 | Ground-truth label IDs | `GT-2026-NNNNNN`, numbered in memory in (issue type, record ID) order; no `GT` key in `core.IdSequence` (tested). |
+| D-G4 | Consequential findings | A finding of another type than a label, on a record in that label's `related_ids`, is consequential: counted separately, never a false positive (ARCHITECTURE §12.3). The three per starter run are each injected refund's source payment (P6-O3). |
+| D-G5 | Cross-database commit order | Domain rows are written in a `default` transaction; the labels in a `ground_truth` transaction nested inside it, which commits first. See P7-O3 for both failure directions and recovery. |
+| D-G6 | Fresh databases only | `generate_data` and `POST /datagen/runs/` refuse (409 `DATASET_NOT_FRESH`, command error) unless every domain, run and label table is empty. No force option. |
+
+## Phase 7 observations
+
+| # | Observation | Current behaviour |
+|---|---|---|
+| P7-O1 | Phase 7 / Phase 8 boundary (ARCHITECTURE §16) | Phase 7 delivers and verifies the starter scale. `--scale full` and `--scale-factor` run the same code but full-scale volumes, timing, `export_data`, file manifests, `verify_reproducibility`, `run_log.json` and `validation_summary.md` are Phase 8; `demo_workflow`, DATA_DICTIONARY and API.md are Phase 9. |
+| P7-O2 | `DATASET_NOT_FRESH` is a second approved extension to the 18 frozen domain error codes (beside Phase 4's `ALLOCATION_LIMIT_REACHED`) | 409; registered in `core.exceptions.EXTENSION_DOMAIN_ERROR_CODES` (the only Phase 0–6 module changed besides the `config/urls.py` include). |
+| P7-O3 | D-G5: SQLite cannot commit two databases atomically | Labels commit first. (1) A failure before or while writing the labels rolls both back: nothing is written. (2) A failure of the domain commit after the labels committed leaves labels only; the next generation is refused (the ground-truth database is not fresh), so a dataset can never be mixed with another run's labels. Recovery: restore **both** database backups taken before generating (or delete both files and migrate both again); both are then in the same pre-generation state and generation can run. Both directions are tested (`tests/datagen/test_transactions.py`). |
+| P7-O4 | The label checksum is not stored in `GenerationRun` | `GenerationRun` lives in the default database, which the detector reads; the label checksum is computed from the ground-truth database and reported by `generate_data`, `evaluate` and the evaluation endpoint. `GenerationRun.row_counts` / `checksums` name no label table (tested). |
+| P7-O5 | One `recorded_at` per generation | Every generated row and label gets the run's start time, so insertion timing cannot reveal injected rows (`recorded_at` is excluded from checksums anyway). |
+| P7-O6 | BR-ALC-06 (scholarship precedence) is not exercised by the generated baseline | Awards are made and applied on the invoice date, before any payment. If the engine ever met a release it raises rather than approximate; the rule stays covered by the Phase 3–4 tests. |
+| P7-O7 | Generation policies the design leaves open (assumptions, all in `config/generation.yaml`) | 20 named programs (8 STEM, 12 with a lab) priced ₹3,000–₹12,000 per credit; flat fees (REGISTRATION 5,000, TECHNOLOGY 4,000, LIBRARY 2,000, STUDENT_ACTIVITY 3,000, LAB 12,000, INTERNATIONAL_SERVICE 15,000); international ×1.6 and FALL +4 % on tuition; 10 FALL tuition V2 versions at +3 %; students created on 2026-01-01, admitted 25 % in TERM-2026-SPRING and the rest in 2023–2025; 1.5 % designated full-ride students (GPA 3.85–4.00, need 0.85–1.00; no other student may qualify); every enrollment on or before the invoice date; payment profiles (full, instalments, partial, late) with exact quotas; 2.5 % of students go ON_HOLD and back; refunds requested after exits and selected overpayments; a refund whose caps no longer hold when it is approved or processed is REJECTED (as an operator would after the 422). |
+| P7-O8 | Starter-scale targets for the count-based bands (DATABASE_DESIGN §7 states full scale) | Scaled by the factor, never below 1: full-ride awards 3–6, `SCHOLARSHIP_COVERED` invoices ≥ 3, each boundary case ≥ 1. Percentage bands apply unchanged. Generation fails when any is missed. |
+| P7-O9 | The "≈" volumes of DATABASE_DESIGN §7 are outcomes, not targets | Starter actuals: InvoiceLine 1,767 + 17 injected (≈ 1,800), LedgerEntry 2,476 + 20 (≈ 2,520), InvoiceEvent 1,086 + 6 (≈ 750: a COLLECTION event is written at every status change, as the services do), PaymentAllocation 1,892 + 3 (≈ 1,280: instalments and AUTO allocation across lines), Refund 22 + 3 (≈ 24). |
+| P7-O10 | Rolling back `datagen.0001_initial` | Drops `GenerationRun` and the label table; generated domain rows stay, so the next generation is refused. A full rollback of a generated dataset is a restore of both database backups. |
+| P7-O11 | `meets_targets` with a type that has neither labels nor findings | Vacuously met (0/0 is reported as null, never as 1); a type with labels and no finding fails through recall 0. |
+| P7-O12 | Existing tests extended for Phase 7 (no assertion removed or weakened) | `tests/config/test_router.py` and `tests/verification/test_verify_isolation.py` (the ground-truth database now holds exactly the label table; every model but GroundTruthLabel routes to default); `tests/verification/test_verify_withdrawals.py::test_phase5_needs_no_migration` (also allows the ground-truth connection, which `makemigrations --check` now inspects); `tests/verification/test_verify_routes.py` (48 → 51 routes); `tests/verification/test_verify_openapi_examples.py` (+15 examples, all replayed); `tests/core/test_exceptions.py` (P7-O2). |
+
+## Defects found and fixed during Phase 7 implementation (before delivery)
+
+| # | Defect | Fixed in |
+|---|---|---|
+| P7-B1 | The first scenario draft let a single-payment profile receive extra payment slots from the exact-count adjustment; the extra payments found nothing open and became 33 advance payments. | `datagen/pipeline/scenario.py`: every payment but the last on an invoice pays a share of what is open. Found by the scenario statistics before any test existed; now 0 advance payments. |
+| P7-B2 | The "scholarship exactly at cap" boundary counter also counted FIXED awards (always equal to their cap). | Counts only PERCENT awards capped exactly. |
 
 ## Phase 6 policy decisions (approved before implementation)
 
