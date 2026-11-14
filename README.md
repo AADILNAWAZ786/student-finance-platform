@@ -5,7 +5,7 @@ and reconcile student balances. Django 5.2 LTS + Django REST Framework + SQLite.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md) (v1.1, frozen).
 
-**Status: Phase 5, withdrawals and cancellations** (on top of Phase 1: students, programs, terms,
+**Status: Phase 6, reconciliation** (on top of Phase 1: students, programs, terms,
 enrollments; Phase 2: fee schedules, invoices, waivers, statuses, void, late fees, the ledger
 and the student ledger, statement and balance views; Phase 3: scholarship types, eligibility,
 awards and their application). Phase 4 adds payments from any payer (each posting one PAYMENT
@@ -18,8 +18,14 @@ REFUND ledger entry when processed. Phase 5 adds withdrawals (BR-WDR-02 schedule
 start (BR-WDR-01: every line but REGISTRATION credited, invoice CANCELLED), each releasing
 scholarship money first (proportional reversal) and then payment money (last-in-first-out) so
 no line stays over-covered (BR-WDR-03). Refunds are never automatic: the exit returns a refund
-quote, and a WITHDRAWAL / CANCELLATION refund is requested separately. Reconciliation is not
-implemented yet.
+quote, and a WITHDRAWAL / CANCELLATION refund is requested separately. Phase 6 adds
+reconciliation: balance snapshots (the reported balance, checked against the ledger) and a
+detector that runs every ARCHITECTURE §12.1 check (structural, relationship, temporal,
+lifecycle, arithmetic, the five required anomaly types, and the per-student balance identity
+BR-BAL-02), re-checks every service-layer rule of the design
+([`docs/phase6_sv_coverage.md`](docs/phase6_sv_coverage.md)), and stores what it finds as
+findings, without ever changing domain data. The data
+generator and its evaluation (Phase 7) are not implemented yet.
 
 Tested on Python 3.14.6 and Python 3.12 with the pinned requirements (Django 5.2.19).
 
@@ -29,7 +35,8 @@ login↔program link. Learners currently have no access; instructors read progra
 Billing, scholarship, payment and refund data (Phases 2–5) is readable by `platform_admin` and
 `support_staff` only; support staff may also request a refund. Withdrawals and cancellations
 may be performed by `platform_admin` and `academic_admin`; only `platform_admin` sees their
-financial details.
+financial details. Reconciliation runs and snapshots are `platform_admin` only; runs, findings
+and snapshots are readable by `platform_admin` and `support_staff`.
 See [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md).
 
 ## Quick start
@@ -138,9 +145,24 @@ an exit writes (ADJUSTMENT lines and ledger entries, scholarship REVERSE rows, p
 DEALLOCATE rows, events) is append-only and happens in one transaction. Refunds afterwards:
 `POST /api/v1/refunds/` with `reason` WITHDRAWAL or CANCELLATION and the `enrollment_id`.
 
+### Reconciliation API (Phase 6)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/v1/reconciliation/runs/` | `{scope: "ALL" \| "STUDENT", student_id?, as_of_date}`; synchronous; 201 with the run (COMPLETED, or FAILED with `summary.error` and no findings) |
+| GET | `/api/v1/reconciliation/runs/`, `/api/v1/reconciliation/runs/{id}/` | summary: per-check counts, skipped (global) checks for a STUDENT run, findings by issue type and severity, students reconciled |
+| GET | `/api/v1/anomalies/`, `/api/v1/anomalies/{id}/` | findings; filters `run`, `issue_type`, `student`, `severity` |
+| POST | `/api/v1/balance-snapshots/` | `{as_of_date, student_id?}`: one student or all; an existing snapshot is returned unchanged (`created: false`) |
+| GET | `/api/v1/balance-snapshots/`, `/api/v1/balance-snapshots/{id}/` | filters `student`, `as_of_date` |
+
+Command (same engine): `python manage.py run_reconciliation --as-of 2026-12-31
+[--scope STUDENT --student STU-000001]`. A run reads outside any transaction, so it is not a
+snapshot: writes that overlap a run can show up as findings on the records being written;
+re-run once they finish (see KNOWN_LIMITATIONS, D-R2).
+
 ## Tests and quality
 
-Everything implemented so far (Phases 0–5), including the runnable unit tests:
+Everything implemented so far (Phases 0–6), including the runnable unit tests:
 
 ```bash
 .venv/bin/python -m pytest tests/core tests/config tests/architecture tests/models tests/services \
@@ -150,8 +172,10 @@ Everything implemented so far (Phases 0–5), including the runnable unit tests:
     tests/unit/test_full_ride_scholarship.py tests/unit/test_scholarship_calculators.py \
     tests/unit/test_payment_allocation.py tests/unit/test_payment_calculators.py \
     tests/unit/test_withdrawal_calculators.py tests/unit/test_withdrawal_refund_pct.py \
-    tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py -rxX
-#   2232 passed, 2 xfailed (the two blocked rules)
+    tests/unit/test_withdrawal_release.py tests/unit/test_worked_example.py \
+    tests/unit/test_reconciliation_checks.py tests/unit/test_reconciliation_sv_rules.py \
+    tests/unit/test_reconciliation_counter_gaps.py -rxX
+#   2513 passed, 2 xfailed (the two blocked rules)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
@@ -167,7 +191,8 @@ and every response validated against the OpenAPI schema. Results:
 [`docs/phase2_verification_results.txt`](docs/phase2_verification_results.txt),
 [`docs/phase3_verification_results.txt`](docs/phase3_verification_results.txt),
 [`docs/phase4_verification_results.txt`](docs/phase4_verification_results.txt),
-[`docs/phase5_verification_results.txt`](docs/phase5_verification_results.txt).
+[`docs/phase5_verification_results.txt`](docs/phase5_verification_results.txt),
+[`docs/phase6_verification_results.txt`](docs/phase6_verification_results.txt).
 
 ## Layout
 
@@ -184,11 +209,14 @@ scholarships/    Phase 3: models, calculators (pure), lifecycle, policy, service
                  seed_scholarship_types command
 payments/        Phase 4: models, calculators (pure), lifecycle, policy, services, API,
                  read-only admin
-reconciliation/  calculators.balance_from_ledger (Phase 5); the rest arrives in Phase 6
+reconciliation/  Phase 6: models, calculators (pure; reuse the domain calculators), checks/
+                 (one module per §12.1 family), dataset + loader (default DB only), engine,
+                 services, API, read-only admin, run_reconciliation command
 datagen/         registered app skeleton; arrives in Phase 7
 tests/           core/, config/ (Phase 0); models/, services/, api/, commands/, verification/
-                 (Phases 1–5); workflow/ (§9.3 steps 1–9); architecture/; unit/ (acceptance
-                 tests; 12 runnable now, 1 for Phase 7); billing_fixtures.py,
-                 scholarship_fixtures.py, payment_fixtures.py
+                 (Phases 1–6); workflow/ (§9.3 steps 1–11, step 11 on fixtures); architecture/;
+                 unit/ (acceptance tests; 14 runnable now, 1 for Phase 7); billing_fixtures.py,
+                 scholarship_fixtures.py, payment_fixtures.py, reconciliation_fixtures.py (a clean
+                 world built through the services, and a test-only anomaly injector)
 docs/            design documents (frozen v1.1), KNOWN_LIMITATIONS.md, verification results
 ```

@@ -120,6 +120,15 @@ OPERATIONS = {
     "refunds_process_create": ("post", "/api/v1/refunds/REF-2026-000001/process/", {}),
     "refunds_reject_create": ("post", "/api/v1/refunds/REF-2026-000001/reject/", {}),
     "students_refundable_retrieve": ("get", "/api/v1/students/STU-000001/refundable/", None),
+    # Phase 6: reconciliation
+    "reconciliation_runs_list": ("get", "/api/v1/reconciliation/runs/", None),
+    "reconciliation_runs_create": ("post", "/api/v1/reconciliation/runs/", {}),
+    "reconciliation_runs_retrieve": ("get", "/api/v1/reconciliation/runs/RECON-2026-000001/", None),
+    "anomalies_list": ("get", "/api/v1/anomalies/", None),
+    "anomalies_retrieve": ("get", "/api/v1/anomalies/FND-2026-000001/", None),
+    "balance_snapshots_list": ("get", "/api/v1/balance-snapshots/", None),
+    "balance_snapshots_create": ("post", "/api/v1/balance-snapshots/", {}),
+    "balance_snapshots_retrieve": ("get", "/api/v1/balance-snapshots/SNAP-2026-000001/", None),
 }
 
 TERM_2027 = {
@@ -993,6 +1002,48 @@ PHASE5_SPECIFIC = {
 SPECIFIC.update(PHASE5_SPECIFIC)
 
 
+# --- Phase 6 recipes: reconciliation (platform_admin; the world has no run, finding or snapshot)
+RUNS, ANOMALIES, SNAPS = (
+    "/api/v1/reconciliation/runs/",
+    "/api/v1/anomalies/",
+    "/api/v1/balance-snapshots/",
+)
+BILLING_OPERATIONS.update({"reconciliation_runs_list", "anomalies_list", "balance_snapshots_list"})
+
+PHASE6_SPECIFIC = {
+    ("reconciliation_runs_list", 400, "Invalid status filter"): lambda w: w.finance.get(
+        RUNS, {"status": "DONE"}
+    ),
+    ("reconciliation_runs_create", 400, "STUDENT scope without student_id"): lambda w: (
+        w.finance.post(RUNS, {"scope": "STUDENT", "as_of_date": "2026-12-31"}, format="json")
+    ),
+    ("reconciliation_runs_create", 400, "ALL scope with a student_id"): lambda w: w.finance.post(
+        RUNS,
+        {"scope": "ALL", "student_id": "STU-000001", "as_of_date": "2026-12-31"},
+        format="json",
+    ),
+    ("reconciliation_runs_retrieve", 404, "Unknown ReconciliationRun"): lambda w: w.finance.get(
+        f"{RUNS}RECON-2026-999999/"
+    ),
+    ("anomalies_list", 400, "Invalid issue_type filter"): lambda w: w.finance.get(
+        ANOMALIES, {"issue_type": "LATE_PAYMENT"}
+    ),
+    ("anomalies_retrieve", 404, "Unknown AnomalyFinding"): lambda w: w.finance.get(
+        f"{ANOMALIES}FND-2026-999999/"
+    ),
+    ("balance_snapshots_list", 400, "Invalid as_of_date filter"): lambda w: w.finance.get(
+        SNAPS, {"as_of_date": "31-12-2026"}
+    ),
+    ("balance_snapshots_create", 400, "A server-computed field sent"): lambda w: w.finance.post(
+        SNAPS, {"as_of_date": "2026-12-31", "reported_balance": "0.00"}, format="json"
+    ),
+    ("balance_snapshots_retrieve", 404, "Unknown BalanceSnapshot"): lambda w: w.finance.get(
+        f"{SNAPS}SNAP-2026-999999/"
+    ),
+}
+SPECIFIC.update(PHASE6_SPECIFIC)
+
+
 def _recipe(op_id, status, summary):
     if (op_id, status, summary) in SPECIFIC:
         return SPECIFIC[(op_id, status, summary)]
@@ -1073,7 +1124,9 @@ def test_documented_examples_were_found():
     # approve 6, process 6, reject 5; student refundable 3
     # Phase 5: enrollments withdraw 6 and cancel 5; refunds create +1 (two 400s replace the
     # Phase 4 "Reason other than OVERPAYMENT" one, which is now valid input)
-    assert len(EXAMPLES) == 56 + 56 + 36 + 61 + 12
+    # Phase 6 reconciliation 28: runs list 4, create 4, retrieve 3; anomalies list 4,
+    # retrieve 3; balance snapshots list 4, create 3, retrieve 3
+    assert len(EXAMPLES) == 56 + 56 + 36 + 61 + 12 + 28
     assert {op for op, *_ in EXAMPLES} >= set(OPERATIONS) | {"health_check"}
 
 
@@ -1105,6 +1158,9 @@ RESOURCE_OF = {
     "scholarships": "Scholarship",
     "payments": "Payment",
     "refunds": "Refund",
+    "reconciliation": "ReconciliationRun",
+    "anomalies": "AnomalyFinding",
+    "balance-snapshots": "BalanceSnapshot",
 }
 
 

@@ -63,6 +63,13 @@ ROUTES = [
     # Phase 5: withdrawals and cancellations (actions on an enrollment)
     ("enrollment-withdraw", "/api/v1/enrollments/ENR-2026-000001/withdraw/", {"POST"}),
     ("enrollment-cancel", "/api/v1/enrollments/ENR-2026-000001/cancel/", {"POST"}),
+    # Phase 6: reconciliation (D-R11 adds the snapshot list/detail and the finding detail)
+    ("balance-snapshots", "/api/v1/balance-snapshots/", {"GET", "POST"}),
+    ("balance-snapshot", "/api/v1/balance-snapshots/SNAP-2026-000001/", {"GET"}),
+    ("reconciliation-runs", "/api/v1/reconciliation/runs/", {"GET", "POST"}),
+    ("reconciliation-run", "/api/v1/reconciliation/runs/RECON-2026-000001/", {"GET"}),
+    ("anomalies", "/api/v1/anomalies/", {"GET"}),
+    ("anomaly", "/api/v1/anomalies/FND-2026-000001/", {"GET"}),
 ]
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 DISALLOWED = [
@@ -100,8 +107,8 @@ def test_route_table_matches_resolver():
                 yield prefix + str(p.pattern)
 
     api = sorted(r for r in walk(get_resolver()) if r.startswith("api/v1/"))
-    # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11, Phase 5: +2
-    assert len(api) == len(ROUTES) == 42
+    # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11, Phase 5: +2, Phase 6: +6
+    assert len(api) == len(ROUTES) == 48
 
 
 @pytest.mark.parametrize(

@@ -3,4 +3,5 @@ once in tests/billing_fixtures.py, tests/scholarship_fixtures.py and tests/payme
 
 from tests.billing_fixtures import *  # noqa: F403
 from tests.payment_fixtures import *  # noqa: F403
+from tests.reconciliation_fixtures import *  # noqa: F403
 from tests.scholarship_fixtures import *  # noqa: F403
