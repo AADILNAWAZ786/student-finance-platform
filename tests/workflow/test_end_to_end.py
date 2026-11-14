@@ -1,4 +1,6 @@
-"""ARCHITECTURE §9.3 demonstration workflow, steps 1–9, entirely through the API.
+"""ARCHITECTURE §9.3 demonstration workflow, steps 1–11, entirely through the API (step 11's
+anomalies are injected below the API, on fixtures, as ARCHITECTURE §16 Phase 6 requires: the
+API refuses to create them).
 
 Later steps (6 payments … 11 anomalies) are added by the phase that builds them. The
 documented IDs (STU-010001, ENR-2026-030001) assume the generated dataset is loaded; on an
@@ -417,3 +419,102 @@ def test_workflow_steps_6_to_9(api, master_data):
     balance = _ok(api.get(f"/api/v1/students/{sid}/balance/"), 200)
     assert (balance["ledger_balance"], balance["unallocated_credit"]) == ("0.00", "0.00")
     assert balance["identity"]["holds"] is True
+
+
+def test_workflow_step_10_a_clean_student_reconciles(api, master_data):
+    """§9.3 step 10: POST /reconciliation/runs/ → 0 findings for this clean student."""
+    sid = _ok(
+        api.post(
+            "/api/v1/students/",
+            {
+                "first_name": "Ravi",
+                "last_name": "Iyer",
+                "email": "ravi.iyer@example.edu",
+                "date_of_birth": "2006-05-02",
+                "residency": "DOMESTIC",
+                "program": master_data["program_id"],
+                "admit_term": "TERM-2026-FALL",
+                "gpa": "3.00",
+                "need_index": "0.30",
+            },
+            format="json",
+        ),
+        201,
+    )["student_id"]
+    enrollment = _ok(
+        api.post(
+            "/api/v1/enrollments/",
+            {"student": sid, "term": "TERM-2026-FALL", "credits": 16, "enrolled_on": "2026-08-10"},
+            format="json",
+        ),
+        201,
+    )
+    _ok(
+        api.post(
+            "/api/v1/invoices/generate/",
+            {"enrollment_id": enrollment["enrollment_id"]},
+            format="json",
+        ),
+        201,
+    )
+    _ok(
+        api.post(
+            "/api/v1/payments/",
+            {
+                "student_id": sid,
+                "amount": "100000.00",
+                "received_date": "2026-08-25",
+                "method": "UPI",
+                "payer_type": "SELF",
+                "external_reference": "UPI-WF-10",
+                "auto_allocate": True,
+            },
+            format="json",
+        ),
+        201,
+    )
+    _ok(api.post("/api/v1/balance-snapshots/", {"as_of_date": "2026-12-31"}, format="json"), 201)
+    for body in (
+        {"scope": "STUDENT", "student_id": sid, "as_of_date": "2026-12-31"},
+        {"scope": "ALL", "as_of_date": "2026-12-31"},
+    ):
+        run = _ok(api.post("/api/v1/reconciliation/runs/", body, format="json"), 201)
+        assert (run["status"], run["findings_count"]) == ("COMPLETED", 0)
+        assert run["summary"]["students"]["pct_reconciled"] == "100.00"
+        anomalies = _ok(api.get("/api/v1/anomalies/", {"run": run["run_id"]}), 200)
+        assert anomalies["count"] == 0
+
+
+def test_workflow_step_11_anomalies_on_fixtures(api_client_for, clean_world):
+    """§9.3 step 11 on fixtures: the five required types, injected below the API, are listed
+    by GET /anomalies/?run= (plus the one documented consequential finding)."""
+    from tests import reconciliation_fixtures as fx
+
+    api = api_client_for("platform_admin")
+    injected = {
+        ("PAYMENT_OVER_ALLOCATED", fx.inject_payment_over_allocated(clean_world["S16"])),
+        (
+            "SCHOLARSHIP_EXCEEDS_ELIGIBLE_FEES",
+            fx.inject_scholarship_over_award(clean_world["S16"]),
+        ),
+        ("DUPLICATE_INVOICE", fx.inject_duplicate_invoice(clean_world["S6"])),
+        ("REFUND_EXCEEDS_NET_PAID", fx.inject_refund_over_net_paid(clean_world["S17"])),
+    }
+    _ok(api.post("/api/v1/balance-snapshots/", {"as_of_date": "2026-12-31"}, format="json"), 201)
+    injected.add(("BALANCE_LEDGER_MISMATCH", fx.inject_balance_mismatch(clean_world["S2"])))
+    run = _ok(
+        api.post(
+            "/api/v1/reconciliation/runs/",
+            {"scope": "ALL", "as_of_date": "2026-12-31"},
+            format="json",
+        ),
+        201,
+    )
+    rows = _ok(api.get("/api/v1/anomalies/", {"run": run["run_id"], "page_size": 100}), 200)
+    found = {(f["issue_type"], f["record_id"]) for f in rows["results"]}
+    assert injected <= found
+    assert {t for t, _ in found - injected} == {"PAYMENT_OVER_ALLOCATED"}  # consequential
+    assert len(found - injected) == 1
+    for t in ("PAYMENT_OVER_ALLOCATED", "DUPLICATE_INVOICE", "BALANCE_LEDGER_MISMATCH"):
+        filtered = _ok(api.get("/api/v1/anomalies/", {"run": run["run_id"], "issue_type": t}), 200)
+        assert {f["issue_type"] for f in filtered["results"]} == {t}

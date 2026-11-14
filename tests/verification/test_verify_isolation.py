@@ -161,7 +161,8 @@ def test_no_api_operation_touches_ground_truth(admin_api, staff_api, student):
 
 def test_ground_truth_database_holds_no_domain_tables():
     tables = set(connections["ground_truth"].introspection.table_names())
-    assert tables == {"django_migrations"}
+    # Phase 7: the label table is the only model table there (ARCHITECTURE §12.2.1)
+    assert tables == {"django_migrations", "datagen_groundtruthlabel"}
     domain = {
         "students_student",
         "academics_enrollment",
@@ -175,12 +176,17 @@ def test_ground_truth_database_holds_no_domain_tables():
 
 
 def test_router_sends_every_phase1_model_to_default():
+    """Every model goes to default, except GroundTruthLabel (Phase 7), the only model of the
+    ground-truth database."""
     from django.apps import apps
     from django.db import router
 
+    from datagen.models import GroundTruthLabel
+
     for model in apps.get_models():
-        assert router.db_for_read(model) == "default", model
-        assert router.db_for_write(model) == "default", model
+        expected = "ground_truth" if model is GroundTruthLabel else "default"
+        assert router.db_for_read(model) == expected, model
+        assert router.db_for_write(model) == expected, model
 
 
 # --- Phase 2: billing ----------------------------------------------------------------------------

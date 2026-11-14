@@ -1,0 +1,195 @@
+Phase 6 (reconciliation): verification results — FINAL DELTA (P6-O7 and P6-O15 resolved)
+=====================================================================================
+Date: 2026-11-14. Every result below was produced by running the real project.
+Base: the verified Phase 5 checkpoint, branch phase5-withdrawals, commit
+d1bd07b534978a10f217195bd2637bbf37c0bdf8 (parent fb4c497, main). Branch phase6-reconciliation
+exists only locally (not pushed). Nothing committed or pushed.
+This final revision supersedes both earlier Phase 6 deltas. On top of the P6-O7 revision
+(service-layer rule coverage, sections 4 and 5) it adds counter-gap detection (P6-O15,
+section 5a) using the existing INVALID_ID_FORMAT issue type; everything else is unchanged and
+re-verified.
+Approved plan: D-R1 (Option A) … D-R13, the 12 safeguards, and the P6-O7 instructions
+(no new issue type, frozen documents unchanged, D-R4 / D-R5 unchanged, P6-O1 kept).
+Frozen docs (ARCHITECTURE.md, DATABASE_DESIGN.md v1.1) unchanged. No Phase 1–5 app code
+changed: the only non-reconciliation code change is one include in config/urls.py.
+
+Environments: Python 3.14.6 (Django 5.2.19, DRF 3.18.3, drf-spectacular 0.30.0, pytest 9.2.0,
+ruff 0.17.4) and Python 3.12.3. manage.py always ran with scratch settings (section 10).
+
+1. Project checks (same result on 3.14.6 and 3.12.3)
+------------------------------------------------------
+manage.py check                                   System check identified no issues (0 silenced).
+manage.py makemigrations --check --dry-run        No changes detected
+manage.py spectacular --validate --fail-on-warn   exit 0, no warnings (60 operations)
+ruff check . / ruff format --check . (0.17.4)     All checks passed! / 241 files already formatted
+
+2. Full regression, Phases 0–6
+------------------------------
+README "Tests and quality" command:
+    Python 3.14.6   2513 passed, 2 xfailed in 186.06s
+    Python 3.12.3   2513 passed, 2 xfailed in 193.65s
+Phase 5 baseline 2232; first Phase 6 delta 2400; P6-O7 revision 2476; this revision +37
+(32 unit + 5 verification, section 5a). The two runs were made one after the other: run in
+parallel they share the SQLite test database and fail with "disk I/O error", which is not a
+test result.
+No Phase 0–5 test removed, skipped or weakened. XFAIL (strict, unchanged): L1, L2.
+Frozen acceptance: tests/architecture/test_ground_truth_isolation.py 14 passed.
+
+3. Clean data: zero findings (safeguard 3 / P6-O7 item 5)
+--------------------------------------------------------
+tests/verification/test_verify_reconciliation_clean.py (5): the clean world, built only through
+the Phase 1–5 services (18 students; now also an international student with a hardship waiver
+and an INTERNATIONAL_SERVICE line), at as-of 08-20, 09-20, 10-31 and 12-31 (ALL) and per
+student: 0 findings, 100.00 % reconciled, with all 63 checks running (the gap checks examined
+233 parent-scoped and 427 global / per-year rows). Every new check examined
+rows (e.g. A-ELIGIBILITY 42 evaluations, A-EXIT-ADJUSTMENTS 9 exits, A-LATE-FEE 5 late fees).
+Populated Phase 5 database (section 8): 0 findings at 4 dates (ALL, 63 checks) and in 3 STUDENT
+runs (55 checks, 8 GLOBAL listed as skipped); 9,272 records checked in the final ALL run.
+
+4. Service-layer rule coverage (P6-O7 items 1–3, 6, 7)
+------------------------------------------------------
+docs/phase6_sv_coverage.md:
+  A. 61 DATABASE_DESIGN rules (every SV / REC row, the service-enforced validations, the
+     DB rules re-checked for imported data, and SV-60 / SV-61 counter gaps), each with check, family, rule ID, frozen issue
+     type and test;
+  B. ARCHITECTURE §10 service-layer row, item by item;
+  C. ARCHITECTURE §6, every BR rule;
+  D. the parts no stored data can re-check, with the reason (P6-O1, P6-O13, P6-O14);
+  E. the 63 registered checks, generated from the code.
+New checks (23, reconciliation/checks/service_rules.py), using only the 14 frozen issue types:
+  T-STUDENT-AGE, T-ENROLLMENT-DATES, RL-STUDENT-PROGRAM, RL-ENROLLMENT-RULES, T-TERM-CENSUS*,
+  RL-BILLABLE-TERM-MASTER*, T-INVOICE-CALENDAR, RL-FEE-APPLICABLE, A-WAIVER-WAIVABLE,
+  A-VOID-INVOICE, RL-CANCELLED-INVOICE, A-EXIT-ADJUSTMENTS, A-LATE-FEE (BR-LATE-01),
+  A-SCHOLARSHIP-CAP (BR-SCH-03), S-SCHOLARSHIP-GROUP (BR-SCH-05/08), A-AWARD-APPLIED,
+  RL-SCHOLARSHIP-COVERAGE, T-SCHOLARSHIP-DATES, RL-AWARD-ON-ISSUED-INVOICE, A-ELIGIBILITY,
+  T-REFUND-DATES, RL-REFUND-ENROLLMENT, A-REFUND-RECORDED-CAPS   (* GLOBAL)
+Each reuses the domain apps' calculators, policies and constants (students age_on / MIN_AGE /
+MAX_AGE; academics ADD_DROP_DAYS / CENSUS_OFFSET_DAYS / withdrawal_refund_pct; billing
+applicable_fee_types / LateFeePolicy / late_fee / withdrawal_adjustments /
+cancellation_adjustments; scholarships evaluate / coverable_lines / eligible_fee_base /
+award_amount; payments REFUND_ENROLLMENT_STATUS).
+D-R4 and D-R5 unchanged: Q-REFUND-EXCEEDS-NET-PAID and Q-SCHOLARSHIP-EXCEEDS-FEES are untouched;
+the new BR-SCH-03 and recorded-cap checks stay silent on the records those report
+(test_d_r4_and_d_r5_findings_are_not_reported_twice), so the five injected anomaly types still
+give exactly their findings plus the one documented consequence (anomaly tests re-run, green).
+P6-O1 kept as the historical fee-version limitation; no historical data invented.
+
+5. Tests for every newly covered rule (P6-O7 item 4)
+---------------------------------------------------
+tests/verification/test_verify_reconciliation_sv_rules.py (22): real corruptions of the clean
+    world (QuerySet.update / ORM inserts), each asserting the exact finding list with issue
+    type, rule ID, severity, action, entity, record_id, student and check. Where one
+    corruption necessarily breaks several rules, every finding is asserted and the reason
+    given (e.g. a domestic student with an INTERNATIONAL_SERVICE line: BR-FEE-04 + two
+    BR-FEE-01 schedule mismatches).
+tests/unit/test_reconciliation_sv_rules.py (51): pure rows for what the database cannot hold
+    in isolation (e.g. the waiver CHECK constraint) and every problem branch: late fee bounds
+    (min, max, 2 % ceiling, posting date, twice, not ISSUED), exit adjustments (missing,
+    correct, wrong date, cancellation keeps registration, adjustment without exit),
+    exclusivity (merit group, full ride either order, revoked), coverage, VOID money,
+    cancelled-invoice consistency, refund caps and dates; plus one test per rule for the
+    checks of the first delta that had none of their own; every new check runs on an empty
+    dataset.
+tests/architecture/test_sv_coverage_matrix.py (3): every registered check is mapped in the
+    matrix, section E lists exactly the registered checks, every cited test exists, and every
+    section A row names frozen issue types.
+
+5a. Counter gaps (P6-O15)
+-------------------------
+Requirement: DATABASE_DESIGN §2 ("Counters are zero-padded, never reused, assigned once at
+insert ... Reconciliation checks format, counter gaps and duplicates") and ARCHITECTURE §12.1
+("ID counter gaps/duplicates"), confirmed by the owner as the explicit requirement D-R13 asked
+for. No issue type added: INVALID_ID_FORMAT, rule R-28, LOW / INVESTIGATE (policy unchanged).
+Frozen documents unchanged.
+Sequences and scopes, taken from core.ids (_SEQUENCED / sequence_key), one sequence per key:
+  global     STU, PRG, SCT
+  per year   ENR (term year), ELG, SCH, PAY, REF, LED, SNAP; EVT per entity (STU, ENR, INV, SCH,
+             REF) and year
+  per parent INV per student and year, LINE per invoice, SCHA per award, ALLOC per payment
+  no counter Term, FeeSchedule, ScholarshipTypeProgram (natural keys): nothing to check
+  excluded   RECON, FND (reconciliation output), GEN (Phase 7 generation runs)
+Checks: S-ID-GAPS-YEAR (global + per-year sequences; GLOBAL, so skipped and listed in a
+STUDENT-scope run) and S-ID-GAPS-PARENT (parent-scoped sequences; PER_STUDENT). 63 checks.
+Finding: one per run of missing counters below the highest stored counter, on the first
+missing ID; details: problem COUNTER_GAP, sequence, missing_from, missing_to, missing_count,
+next_present_id; student = the student of the next present row (parent scopes).
+Not reported (requirement 3):
+  - counters reserved but never used above the highest stored ID: the detector never reads
+    IdSequence;
+  - counters released by refused operations: every ID-allocating service is
+    @transaction.atomic and reserve_sequence rolls back with it (verified below);
+  - a misnumbered row (wrong parent or year): reported once by S-ID-DOMAIN; it fills both its
+    own and its expected counter, so it never also produces gaps; an ID failing its pattern
+    fills none; a sequence holding only misnumbered rows is not checked.
+Ordering: findings sorted by (sequence key, counter); identical whatever the row order.
+tests/unit/test_reconciliation_counter_gaps.py (32): consecutive counters (no finding); a
+    missing middle counter; missing first counters and separate runs in order; holes only below
+    the highest counter; year boundary (PAY-2025 vs PAY-2026); lines per invoice; invoices per
+    student and year; allocations per payment (with the student); events per entity and year;
+    misnumbered row reported once; unparseable IDs left to the format check; deterministic
+    ordering; scopes equal core.ids sequence keys and the GLOBAL / PER_STUDENT split; a missing
+    first counter detected in every one of the 19 sequenced tables.
+tests/verification/test_verify_reconciliation_counter_gaps.py (5): after six refused service
+    operations every committed IdSequence counter (except RECON / FND / GEN) equals the highest
+    stored counter and there are no gap findings; a reserved but unused trailing counter is not
+    a finding; a missing ledger counter is one LOW / INVESTIGATE LedgerEntry finding (R-28) in
+    its year; a missing allocation counter is found within its payment in ALL and STUDENT
+    scope; a STUDENT run skips and lists S-ID-GAPS-YEAR.
+Existing tests: the two global skip-list assertions gain S-ID-GAPS-YEAR (7 → 8 global checks);
+the matrix guard now expects 63 checks and 61 section A rows. No other test changed.
+
+6. Required anomalies and every issue type (unchanged; re-run green)
+--------------------------------------------------------------------
+test_verify_reconciliation_anomalies.py (6), test_verify_reconciliation_issue_types.py (9),
+tests/unit/test_reconciliation_checks.py (25): as in the first delta. The anomaly and
+issue-type tests give exactly the same findings with gap detection on.
+
+7. Services, API, concurrency, schema, workflow (unchanged; re-run green)
+------------------------------------------------------------------------
+test_services_reconciliation.py (21), test_concurrency_reconciliation.py (5),
+test_api_reconciliation.py (24), test_reconciliation_schema_contract.py (11),
+test_verify_reconciliation.py (4), workflow steps 10–11, OpenAPI harness (+28 examples),
+routes (48).
+
+8. Migration rehearsal on a POPULATED Phase 5 database (re-run with this revision)
+--------------------------------------------------------------------------------
+A fresh copy of the Phase 5 database built with the d1bd07b code through its services
+(30 students, 255 ledger entries incl. 16 late fees, 23 adjustments, 24 payments, 96 allocation
+rows, 10 awards, 5 WITHDRAWN and 3 CANCELLED enrollments):
+    migrate: Applying reconciliation.0001_initial... OK (ground truth: recorded only)
+    90 snapshots (3 dates), then run_reconciliation at 01-31, 06-30, 09-30, 12-31 (ALL, 63 checks
+        each, S-ID-GAPS-PARENT and S-ID-GAPS-YEAR included) and 3 STUDENT runs (55 checks, 8
+        GLOBAL skipped and listed): all COMPLETED, findings=0, 30/30 (1/1) reconciled
+    32 tables compared with the pre-migration copy: 0 domain rows changed; Django post_migrate
+        +3 content types and +12 permissions (old rows kept); IdSequence: the 106 existing rows
+        unchanged, +SNAP:2026 and +RECON:2026; integrity_check ok; foreign_key_check clean
+    rollback: migrate reconciliation zero → Unapplying reconciliation.0001_initial... OK; no
+        reconciliation table left; every domain table identical to the pre-migration copy
+    re-apply: Applying reconciliation.0001_initial... OK; run_reconciliation 12-31: 0 findings,
+        30/30 (gap checks examined 357 parent-scoped and 633 global / per-year rows)
+    edge case, rehearsed on a further copy: after rollback and re-apply, new snapshots continue
+        at SNAP-2026-000091 (IdSequence keeps its counters; counters are never reused), and the
+        next run reports one LOW finding, SNAP-2026-000001…000090 missing. Those rows really
+        were dropped by the rollback; restoring the pre-merge backups is the full rollback and
+        leaves no gap (KNOWN_LIMITATIONS P6-O15, PHASE6_VERIFY.md "Rollback").
+Merge rehearsal: a fresh copy of d1bd07b + the final ZIP → manifest OK, tree identical to the
+working tree, gates and the full suite green there (see PHASE6_VERIFY.md).
+
+9. Conflicts and decisions for the owner (KNOWN_LIMITATIONS "Phase 6 observations")
+---------------------------------------------------------------------------------
+P6-O7  RESOLVED (sections 4–5).
+P6-O15 RESOLVED (section 5a): counter gaps checked within each core.ids sequence scope, with
+       INVALID_ID_FORMAT; no issue type added; frozen documents unchanged.
+P6-O1  kept (historical fee-version limitation). P6-O13 (BR-LATE-01 exact base) and P6-O14
+       (choices made on the state at that moment) are the documented non-re-checkable parts.
+Defects found and fixed before delivery: P6-B2 (two new checks reused details keys `expected`
+/ `actual`: a real finding would have failed the run; caught by the new tests); P6-B3 (the
+first gap-check draft gave a misnumbered row only its expected counter, adding a spurious gap
+to an S-ID-DOMAIN finding; caught by test_enrollment_in_a_non_billable_term).
+Not run: the detector was never run on your own db.sqlite3 (section 10). Data entered outside
+the services there (manual edits, deletions) could show gaps on first run.
+
+10. Local databases (never opened)
+----------------------------------
+    db.sqlite3            131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f
+    ground_truth.sqlite3  ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20

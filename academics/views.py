@@ -1,6 +1,9 @@
-"""Academics API: /programs/, /terms/, /enrollments/ (ARCHITECTURE §9.2).
+"""Academics API: /programs/, /terms/, /enrollments/ (ARCHITECTURE §9.2), including the
+Phase 5 actions POST /enrollments/{id}/withdraw/ and /cancel/.
 
-Withdraw and cancel actions arrive in Phase 5 (they post billing adjustments).
+Withdraw / cancel (decision D-W5): platform_admin and academic_admin may call them (§13);
+only platform administrators receive the financial details (invoice amounts, release plan,
+refund quote). Academic administrators get the enrollment outcome only.
 """
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -18,16 +21,25 @@ from academics import services
 from academics.filters import EnrollmentFilter, ProgramFilter, TermFilter
 from academics.models import Enrollment, Program, Term
 from academics.serializers import (
+    CancellationRequestSerializer,
     EnrollmentCreateSerializer,
     EnrollmentEventSerializer,
+    EnrollmentExitSerializer,
     EnrollmentSerializer,
     ProgramCreateSerializer,
     ProgramSerializer,
     TermCreateSerializer,
     TermSerializer,
+    WithdrawalRequestSerializer,
 )
 from core.dates import business_today
-from core.permissions import ACADEMIC_WRITE, MASTER_DATA_READ, STAFF_READ, ReadWriteRoles
+from core.permissions import (
+    ACADEMIC_WRITE,
+    MASTER_DATA_READ,
+    PLATFORM_ADMIN,
+    STAFF_READ,
+    ReadWriteRoles,
+)
 from core.schema import err, error_responses, invalid_choice, list_error_responses, not_found
 
 ID_LOOKUP = r"[^/]+"  # any path segment: malformed IDs reach DRF → enveloped 404
@@ -95,6 +107,71 @@ ENROLLMENT_CREATE_422 = [
         ),
     ),
 ]
+
+
+# Phase 5: withdraw / cancel (verification world: ENR-2026-000001 is the FALL enrollment,
+# enrolled 2026-08-20; ENR-2026-000002 the COMPLETED SPRING one)
+WITHDRAW_400 = (
+    "Before the term start",
+    err(
+        "VALIDATION_ERROR",
+        "Request validation failed.",
+        {
+            "withdrawal_date": [
+                "Must be on or after the term start (2026-09-07); before the start, cancel the "
+                "enrollment instead."
+            ]
+        },
+    ),
+)
+CANCEL_400 = (
+    "On or after the term start",
+    err(
+        "VALIDATION_ERROR",
+        "Request validation failed.",
+        {
+            "cancellation_date": [
+                "Must be before the term start (2026-09-07); from the start on, withdraw the "
+                "enrollment instead."
+            ]
+        },
+    ),
+)
+
+
+def _illegal(target):
+    return err(
+        "ILLEGAL_TRANSITION",
+        f"Enrollment cannot move from COMPLETED to {target}.",
+        {
+            "entity": "Enrollment",
+            "record_id": "ENR-2026-000002",
+            "from_status": "COMPLETED",
+            "to_status": target,
+            "allowed": [],
+        },
+    )
+
+
+WITHDRAW_409 = [
+    ("Not ENROLLED", _illegal("WITHDRAWN")),
+    (
+        "A release needs allocation IDs a payment no longer has",
+        err(
+            "ALLOCATION_LIMIT_REACHED",
+            "PAY-2026-000001 already has 98 allocation rows; 2 more would exceed the 99 its "
+            "allocation ID format allows.",
+            {
+                "payment_id": "PAY-2026-000001",
+                "existing_rows": 98,
+                "requested_rows": 2,
+                "limit": 99,
+            },
+        ),
+    ),
+]
+CANCEL_409 = ("Not ENROLLED", _illegal("CANCELLED"))
+EXIT_404 = not_found("Enrollment")
 
 
 class _ReadCreateViewSet(
@@ -272,6 +349,67 @@ class TermViewSet(_ReadCreateViewSet):
         tags=["academics"],
         responses={200: EnrollmentEventSerializer(many=True), **ENROLLMENT_DETAIL_ERRORS},
     ),
+    withdraw=extend_schema(
+        summary="Withdraw an enrollment (on or after the term start)",
+        description=(
+            "ENROLLED → WITHDRAWN on withdrawal_date (BR-WDR-02). Refundable lines (TUITION, "
+            "LAB) get an ADJUSTMENT of −round_half_up(current net × pct): day 0 = term start; "
+            "days 0–7 80%, 8–14 60%, 15–27 40%, from day 28 (census) 0%. On each adjusted line "
+            "the scholarship is reversed first (BR-SCH-07, split across awards in proportion), "
+            "then the payment excess is deallocated newest first (BR-WDR-03); freed money "
+            "becomes unallocated credit. The invoice stays ISSUED; its collection status is "
+            "recalculated. One transaction: any failure changes nothing. No refund is "
+            "created: request one with POST /refunds/ (reason WITHDRAWAL). Platform admins and "
+            "academic admins may call it; only platform admins receive `invoice` (amounts and "
+            "release plan) and `refund_quote`."
+        ),
+        tags=["academics"],
+        request=WithdrawalRequestSerializer,
+        responses={
+            200: EnrollmentExitSerializer,
+            **error_responses(
+                400,
+                401,
+                403,
+                404,
+                409,
+                examples={400: WITHDRAW_400, 404: EXIT_404, 409: WITHDRAW_409},
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Withdraw on day 10 (60%)",
+                request_only=True,
+                value={"withdrawal_date": "2026-09-17"},
+            )
+        ],
+    ),
+    cancel=extend_schema(
+        summary="Cancel an enrollment (before the term start)",
+        description=(
+            "ENROLLED → CANCELLED on cancellation_date (BR-WDR-01). Every line except "
+            "REGISTRATION gets an ADJUSTMENT of −net, with the same release order as a "
+            "withdrawal; the invoice moves ISSUED → CANCELLED and its collection status stays "
+            "live on what is still owed (registration). Same permissions and response as "
+            "withdraw; `refund_pct` is null."
+        ),
+        tags=["academics"],
+        request=CancellationRequestSerializer,
+        responses={
+            200: EnrollmentExitSerializer,
+            **error_responses(
+                400,
+                401,
+                403,
+                404,
+                409,
+                examples={400: CANCEL_400, 404: EXIT_404, 409: CANCEL_409},
+            ),
+        },
+        examples=[
+            OpenApiExample("Cancel", request_only=True, value={"cancellation_date": "2026-08-25"})
+        ],
+    ),
 )
 class EnrollmentViewSet(_ReadCreateViewSet):
     queryset = Enrollment.objects.select_related("student", "program", "term")
@@ -298,3 +436,54 @@ class EnrollmentViewSet(_ReadCreateViewSet):
     def events(self, request, pk=None):
         enrollment = self.get_object()
         return Response(EnrollmentEventSerializer(enrollment.events.all(), many=True).data)
+
+    @action(detail=True, methods=["post"])
+    def withdraw(self, request, pk=None):
+        enrollment = self.get_object()
+        payload = WithdrawalRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        result = services.withdraw_enrollment(
+            enrollment,
+            withdrawal_date=payload.validated_data["withdrawal_date"],
+            actor=request.user.get_username(),
+        )
+        return Response(_exit_body(request, result))
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        enrollment = self.get_object()
+        payload = CancellationRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        result = services.cancel_enrollment(
+            enrollment,
+            cancellation_date=payload.validated_data["cancellation_date"],
+            actor=request.user.get_username(),
+        )
+        return Response(_exit_body(request, result))
+
+
+def _sees_financial_details(user) -> bool:
+    """D-W5: platform administrators (and superusers, who pass every role check) only."""
+    return user.is_superuser or user.groups.filter(name=PLATFORM_ADMIN).exists()
+
+
+def _exit_body(request, result) -> dict:
+    full = _sees_financial_details(request.user)
+    data = {
+        "enrollment": result.enrollment,
+        "kind": result.kind,
+        "effective_date": result.effective_date,
+        "refund_pct": result.refund_pct,
+        "financial_details_included": full,
+    }
+    if full:  # academic admins never receive these keys (not even as null)
+        financial = result.financial or {"invoice": None, "refund_quote": None}
+        data["invoice"] = financial["invoice"]
+        data["refund_quote"] = financial["refund_quote"]
+    body = EnrollmentExitSerializer(data).data
+    if not full:
+        # DRF renders a missing allow_null field as null instead of skipping it, so drop the
+        # financial keys explicitly: an academic admin must not even see that they exist.
+        for key in ("invoice", "refund_quote"):
+            body.pop(key, None)
+    return body

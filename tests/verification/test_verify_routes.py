@@ -1,4 +1,4 @@
-"""V-ROUTE: every Phase 1, 2, 3 and 4 URL × every HTTP method (actual routes from the URL resolver).
+"""V-ROUTE: every Phase 1–7 URL × every HTTP method (actual routes from the URL resolver).
 
 Allowed methods must not return 405; every other method must return the documented
 405 envelope with an ``Allow`` header. Unknown or malformed URLs under /api/ must also
@@ -60,6 +60,20 @@ ROUTES = [
     ("refund-process", f"/api/v1/refunds/{REF}/process/", {"POST"}),
     ("refund-reject", f"/api/v1/refunds/{REF}/reject/", {"POST"}),
     ("student-refundable", "/api/v1/students/STU-000001/refundable/", {"GET"}),
+    # Phase 5: withdrawals and cancellations (actions on an enrollment)
+    ("enrollment-withdraw", "/api/v1/enrollments/ENR-2026-000001/withdraw/", {"POST"}),
+    ("enrollment-cancel", "/api/v1/enrollments/ENR-2026-000001/cancel/", {"POST"}),
+    # Phase 6: reconciliation (D-R11 adds the snapshot list/detail and the finding detail)
+    ("balance-snapshots", "/api/v1/balance-snapshots/", {"GET", "POST"}),
+    ("balance-snapshot", "/api/v1/balance-snapshots/SNAP-2026-000001/", {"GET"}),
+    ("reconciliation-runs", "/api/v1/reconciliation/runs/", {"GET", "POST"}),
+    ("reconciliation-run", "/api/v1/reconciliation/runs/RECON-2026-000001/", {"GET"}),
+    ("anomalies", "/api/v1/anomalies/", {"GET"}),
+    ("anomaly", "/api/v1/anomalies/FND-2026-000001/", {"GET"}),
+    # Phase 7: data generation and evaluation (platform_admin only; read + action)
+    ("datagen-runs", "/api/v1/datagen/runs/", {"GET", "POST"}),
+    ("datagen-run", "/api/v1/datagen/runs/GEN-2026-0001/", {"GET"}),
+    ("datagen-run-evaluation", "/api/v1/datagen/runs/GEN-2026-0001/evaluation/", {"GET"}),
 ]
 METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 DISALLOWED = [
@@ -97,7 +111,9 @@ def test_route_table_matches_resolver():
                 yield prefix + str(p.pattern)
 
     api = sorted(r for r in walk(get_resolver()) if r.startswith("api/v1/"))
-    assert len(api) == len(ROUTES) == 40  # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11
+    # Phase 1: 11, Phase 2: +12, Phase 3: +6, Phase 4: +11, Phase 5: +2, Phase 6: +6,
+    # Phase 7: +3
+    assert len(api) == len(ROUTES) == 51
 
 
 @pytest.mark.parametrize(

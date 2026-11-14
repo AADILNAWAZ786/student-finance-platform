@@ -670,7 +670,10 @@ def test_registry_has_every_payments_hook():
         "payment": ["payments"],
         "student_credit": ["payments"],
         "refunds": ["payments"],
+        "refund_quote": ["payments"],  # Phase 5
         "payment_release": ["payments"],
+        "adjustment_scholarship_reversal": ["scholarships"],  # Phase 5
+        "adjustment_payment_release": ["payments"],  # Phase 5
     }
     registry.register_payment_release_handler("payments", services.release_for_scholarship)
     with pytest.raises(ValueError, match="different function"):

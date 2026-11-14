@@ -367,8 +367,12 @@ def test_refund_errors(overpaid):
     assert (
         _error(request("10000.01"), 422, "REFUND_EXCEEDS_CREDIT_BALANCE")["rule_id"] == "BR-REF-02"
     )
+    # Phase 5 (D-W6): WITHDRAWAL is a valid reason, but needs a withdrawn enrollment
     assert _error(request("1.00", reason="WITHDRAWAL"), 400, "VALIDATION_ERROR")["details"] == {
-        "reason": ['"WITHDRAWAL" is not a valid choice.']
+        "enrollment_id": ["Required when reason is WITHDRAWAL."]
+    }
+    assert _error(request("1.00", reason="GOODWILL"), 400, "VALIDATION_ERROR")["details"] == {
+        "reason": ['"GOODWILL" is not a valid choice.']
     }
     assert list(_error(request("1.00", status="APPROVED"), 400, "VALIDATION_ERROR")["details"]) == [
         "status"

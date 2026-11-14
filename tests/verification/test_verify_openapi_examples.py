@@ -73,6 +73,8 @@ OPERATIONS = {
     "enrollments_create": ("post", "/api/v1/enrollments/", {}),
     "enrollments_retrieve": ("get", "/api/v1/enrollments/ENR-2026-000001/", None),
     "enrollments_events_list": ("get", "/api/v1/enrollments/ENR-2026-000001/events/", None),
+    "enrollments_withdraw_create": ("post", "/api/v1/enrollments/ENR-2026-000001/withdraw/", {}),
+    "enrollments_cancel_create": ("post", "/api/v1/enrollments/ENR-2026-000001/cancel/", {}),
     # Phase 2: billing
     "fee_schedules_list": ("get", "/api/v1/fee-schedules/", None),
     "fee_schedules_create": ("post", "/api/v1/fee-schedules/", {}),
@@ -118,6 +120,24 @@ OPERATIONS = {
     "refunds_process_create": ("post", "/api/v1/refunds/REF-2026-000001/process/", {}),
     "refunds_reject_create": ("post", "/api/v1/refunds/REF-2026-000001/reject/", {}),
     "students_refundable_retrieve": ("get", "/api/v1/students/STU-000001/refundable/", None),
+    # Phase 6: reconciliation
+    "reconciliation_runs_list": ("get", "/api/v1/reconciliation/runs/", None),
+    "reconciliation_runs_create": ("post", "/api/v1/reconciliation/runs/", {}),
+    "reconciliation_runs_retrieve": ("get", "/api/v1/reconciliation/runs/RECON-2026-000001/", None),
+    "anomalies_list": ("get", "/api/v1/anomalies/", None),
+    "anomalies_retrieve": ("get", "/api/v1/anomalies/FND-2026-000001/", None),
+    "balance_snapshots_list": ("get", "/api/v1/balance-snapshots/", None),
+    "balance_snapshots_create": ("post", "/api/v1/balance-snapshots/", {}),
+    "balance_snapshots_retrieve": ("get", "/api/v1/balance-snapshots/SNAP-2026-000001/", None),
+    # Phase 7: data generation and evaluation (platform_admin only)
+    "datagen_runs_list": ("get", "/api/v1/datagen/runs/", None),
+    "datagen_runs_create": ("post", "/api/v1/datagen/runs/", {}),
+    "datagen_runs_retrieve": ("get", "/api/v1/datagen/runs/GEN-2026-0001/", None),
+    "datagen_runs_evaluation_retrieve": (
+        "get",
+        "/api/v1/datagen/runs/GEN-2026-0001/evaluation/",
+        None,
+    ),
 }
 
 TERM_2027 = {
@@ -863,7 +883,7 @@ PHASE4_SPECIFIC = {
     ("refunds_retrieve", 404, "Unknown Refund"): lambda w: w.finance.get(
         "/api/v1/refunds/REF-2026-999999/"
     ),
-    ("refunds_create", 400, "Reason other than OVERPAYMENT"): lambda w: (
+    ("refunds_create", 400, "WITHDRAWAL without enrollment_id"): lambda w: (
         _pay(w, "174000.00"),
         w.finance.post(
             "/api/v1/refunds/",
@@ -872,6 +892,20 @@ PHASE4_SPECIFIC = {
                 "amount": "100.00",
                 "requested_date": "2026-09-18",
                 "reason": "WITHDRAWAL",
+            },
+            format="json",
+        ),
+    )[1],
+    ("refunds_create", 400, "WITHDRAWAL for an enrollment still ENROLLED"): lambda w: (
+        _pay(w, "174000.00"),
+        w.finance.post(
+            "/api/v1/refunds/",
+            {
+                "payment_id": PAY1,
+                "amount": "100.00",
+                "requested_date": "2026-09-18",
+                "reason": "WITHDRAWAL",
+                "enrollment_id": "ENR-2026-000001",
             },
             format="json",
         ),
@@ -920,6 +954,149 @@ PHASE4_SPECIFIC = {
     ),
 }
 SPECIFIC.update(PHASE4_SPECIFIC)
+
+
+# --- Phase 5 recipes: withdrawals and cancellations ---------------------------------------------
+ENR_FALL, ENR_DONE = "ENR-2026-000001", "ENR-2026-000002"  # FALL (ENROLLED), SPRING (COMPLETED)
+
+
+def _exit(w, enrollment, step, body):
+    return w.admin.post(f"/api/v1/enrollments/{enrollment}/{step}/", body, format="json")
+
+
+def _withdraw_with_a_payment_at_98_rows(w):
+    """48 × (allocate 1.00 + release it) = 96 rows, then 40,000 on L01 and 6,000 on L02 = 98.
+    A withdrawal on day 0 (80%) must release on both lines: 2 more rows do not fit."""
+    from payments import services
+
+    payment = _pay(w, "50000.00")
+    for _ in range(48):
+        (row,) = _manual(w, payment, ("L01", "1.00")).allocations
+        services.deallocate(
+            row,
+            amount=Decimal("1.00"),
+            rule_applied="SCHOLARSHIP_PRECEDENCE",
+            on_date=date(2026, 8, 20),
+            actor="t",
+        )
+    _manual(w, payment, ("L01", "40000.00"), ("L02", "6000.00"))
+    return _exit(w, ENR_FALL, "withdraw", {"withdrawal_date": "2026-09-07"})
+
+
+PHASE5_SPECIFIC = {
+    ("enrollments_withdraw_create", 400, "Before the term start"): lambda w: _exit(
+        w, ENR_FALL, "withdraw", {"withdrawal_date": "2026-09-06"}
+    ),
+    ("enrollments_withdraw_create", 404, "Unknown Enrollment"): lambda w: _exit(
+        w, "ENR-2026-999999", "withdraw", {"withdrawal_date": "2026-09-17"}
+    ),
+    ("enrollments_withdraw_create", 409, "Not ENROLLED"): lambda w: _exit(
+        w, ENR_DONE, "withdraw", {"withdrawal_date": "2026-09-17"}
+    ),
+    (
+        "enrollments_withdraw_create",
+        409,
+        "A release needs allocation IDs a payment no longer has",
+    ): _withdraw_with_a_payment_at_98_rows,
+    ("enrollments_cancel_create", 400, "On or after the term start"): lambda w: _exit(
+        w, ENR_FALL, "cancel", {"cancellation_date": "2026-09-07"}
+    ),
+    ("enrollments_cancel_create", 404, "Unknown Enrollment"): lambda w: _exit(
+        w, "ENR-2026-999999", "cancel", {"cancellation_date": "2026-08-25"}
+    ),
+    ("enrollments_cancel_create", 409, "Not ENROLLED"): lambda w: _exit(
+        w, ENR_DONE, "cancel", {"cancellation_date": "2026-08-25"}
+    ),
+}
+SPECIFIC.update(PHASE5_SPECIFIC)
+
+
+# --- Phase 6 recipes: reconciliation (platform_admin; the world has no run, finding or snapshot)
+RUNS, ANOMALIES, SNAPS = (
+    "/api/v1/reconciliation/runs/",
+    "/api/v1/anomalies/",
+    "/api/v1/balance-snapshots/",
+)
+BILLING_OPERATIONS.update({"reconciliation_runs_list", "anomalies_list", "balance_snapshots_list"})
+
+PHASE6_SPECIFIC = {
+    ("reconciliation_runs_list", 400, "Invalid status filter"): lambda w: w.finance.get(
+        RUNS, {"status": "DONE"}
+    ),
+    ("reconciliation_runs_create", 400, "STUDENT scope without student_id"): lambda w: (
+        w.finance.post(RUNS, {"scope": "STUDENT", "as_of_date": "2026-12-31"}, format="json")
+    ),
+    ("reconciliation_runs_create", 400, "ALL scope with a student_id"): lambda w: w.finance.post(
+        RUNS,
+        {"scope": "ALL", "student_id": "STU-000001", "as_of_date": "2026-12-31"},
+        format="json",
+    ),
+    ("reconciliation_runs_retrieve", 404, "Unknown ReconciliationRun"): lambda w: w.finance.get(
+        f"{RUNS}RECON-2026-999999/"
+    ),
+    ("anomalies_list", 400, "Invalid issue_type filter"): lambda w: w.finance.get(
+        ANOMALIES, {"issue_type": "LATE_PAYMENT"}
+    ),
+    ("anomalies_retrieve", 404, "Unknown AnomalyFinding"): lambda w: w.finance.get(
+        f"{ANOMALIES}FND-2026-999999/"
+    ),
+    ("balance_snapshots_list", 400, "Invalid as_of_date filter"): lambda w: w.finance.get(
+        SNAPS, {"as_of_date": "31-12-2026"}
+    ),
+    ("balance_snapshots_create", 400, "A server-computed field sent"): lambda w: w.finance.post(
+        SNAPS, {"as_of_date": "2026-12-31", "reported_balance": "0.00"}, format="json"
+    ),
+    ("balance_snapshots_retrieve", 404, "Unknown BalanceSnapshot"): lambda w: w.finance.get(
+        f"{SNAPS}SNAP-2026-999999/"
+    ),
+}
+SPECIFIC.update(PHASE6_SPECIFIC)
+
+
+# --- Phase 7 recipes: datagen (platform_admin; the world is not fresh and has no generation run)
+GEN_RUNS = "/api/v1/datagen/runs/"
+BILLING_OPERATIONS.add("datagen_runs_list")
+
+
+def _generation_run():
+    from django.utils import timezone
+
+    from datagen.models import GenerationRun
+
+    GenerationRun.objects.create(
+        run_id="GEN-2026-0001",
+        seed=20261022,
+        scale_name="starter",
+        scale_factor=Decimal("0.0100"),
+        config_hash="0" * 64,
+        row_counts={},
+        checksums={},
+        started_at=timezone.now(),
+    )
+    return f"{GEN_RUNS}GEN-2026-0001/evaluation/"
+
+
+PHASE7_SPECIFIC = {
+    ("datagen_runs_create", 400, "Full scale requested through the API"): lambda w: w.finance.post(
+        GEN_RUNS, {"scale": "full"}, format="json"
+    ),
+    ("datagen_runs_create", 409, "Databases not fresh"): lambda w: w.finance.post(
+        GEN_RUNS, {"scale": "starter"}, format="json"
+    ),
+    ("datagen_runs_retrieve", 404, "Unknown GenerationRun"): lambda w: w.finance.get(
+        f"{GEN_RUNS}GEN-2026-9999/"
+    ),
+    ("datagen_runs_evaluation_retrieve", 404, "Unknown GenerationRun"): lambda w: w.finance.get(
+        f"{GEN_RUNS}GEN-2026-9999/evaluation/", {"reconciliation_run": "RECON-2026-000001"}
+    ),
+    ("datagen_runs_evaluation_retrieve", 400, "reconciliation_run missing"): lambda w: (
+        w.finance.get(_generation_run())
+    ),
+    ("datagen_runs_evaluation_retrieve", 400, "Unknown reconciliation run"): lambda w: (
+        w.finance.get(_generation_run(), {"reconciliation_run": "RECON-2026-999999"})
+    ),
+}
+SPECIFIC.update(PHASE7_SPECIFIC)
 
 
 def _recipe(op_id, status, summary):
@@ -1000,7 +1177,12 @@ def test_documented_examples_were_found():
     # Phase 4 payments and refunds 61: payments list 4, create 5, retrieve 3, allocate 8,
     # allocations 4; payment-allocations list 4; refunds list 4, create 6, retrieve 3,
     # approve 6, process 6, reject 5; student refundable 3
-    assert len(EXAMPLES) == 56 + 56 + 36 + 61
+    # Phase 5: enrollments withdraw 6 and cancel 5; refunds create +1 (two 400s replace the
+    # Phase 4 "Reason other than OVERPAYMENT" one, which is now valid input)
+    # Phase 6 reconciliation 28: runs list 4, create 4, retrieve 3; anomalies list 4,
+    # retrieve 3; balance snapshots list 4, create 3, retrieve 3
+    # Phase 7 datagen 15: runs list 3, create 4, retrieve 3, evaluation 5
+    assert len(EXAMPLES) == 56 + 56 + 36 + 61 + 12 + 28 + 15
     assert {op for op, *_ in EXAMPLES} >= set(OPERATIONS) | {"health_check"}
 
 
@@ -1032,6 +1214,10 @@ RESOURCE_OF = {
     "scholarships": "Scholarship",
     "payments": "Payment",
     "refunds": "Refund",
+    "reconciliation": "ReconciliationRun",
+    "anomalies": "AnomalyFinding",
+    "balance-snapshots": "BalanceSnapshot",
+    "datagen": "GenerationRun",
 }
 
 

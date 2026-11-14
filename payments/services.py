@@ -30,6 +30,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
+from academics.calculators import withdrawal_refund_pct
 from billing import calculators as billing_calc
 from billing import services as billing
 from billing.models import Invoice, InvoiceLine, LedgerEntry
@@ -43,6 +44,8 @@ from payments.lifecycle import REFUND_TRANSITIONS
 from payments.models import Payment, PaymentAllocation, Refund, RefundEvent
 
 check_business_date = billing.check_business_date
+# D-W6: a WITHDRAWAL / CANCELLATION refund names an enrollment that has had that exit
+REFUND_ENROLLMENT_STATUS = {policy.WITHDRAWAL: "WITHDRAWN", policy.CANCELLATION: "CANCELLED"}
 
 
 class PaymentReleaseFailed(RuntimeError):
@@ -589,6 +592,31 @@ def release_for_scholarship(*, invoice, releases, on_date: date, actor: str, sou
     )
 
 
+def release_for_adjustment(
+    *, deallocations, rule: str, on_date: date, date_field: str, actor: str, source_ref=None
+) -> list:
+    """BR-WDR-03 step 2 (registered with billing as the payment_release adjustment handler):
+    write DEALLOCATE rows for ``deallocations`` = [(allocation_id, amount > 0)], the LIFO
+    plan billing computed, with ``rule`` WITHDRAWAL_RELEASE or CANCELLATION_RELEASE.
+
+    Every row is validated (Σ releases ≤ original, date ≥ the allocation's date) and the
+    99-row capacity of every payment touched is checked before anything is written. Freed
+    money becomes unallocated credit (refundable, BR-REF). The collection status is left to
+    billing, which recalculates it once after the whole withdrawal or cancellation.
+    """
+    if rule not in (policy.WITHDRAWAL_RELEASE, policy.CANCELLATION_RELEASE):
+        raise ValidationError(
+            {"rule_applied": ["Must be WITHDRAWAL_RELEASE or CANCELLATION_RELEASE."]}
+        )
+    plan = [
+        calc.ReleaseCalc(allocation_id, round_money(amount))
+        for allocation_id, amount in deallocations
+    ]
+    if not plan:
+        return []
+    return _write_releases(plan, rule=rule, on_date=on_date, field=date_field)
+
+
 # --- refunds (BR-REF-01..04) ----------------------------------------------------------------------
 
 
@@ -713,8 +741,17 @@ def request_refund(
         errors["enrollment"] = [f"Must be omitted when reason is {reason}."]
     if enrollment is not None and enrollment.student_id != payment.student_id:
         errors["enrollment"] = [f"{enrollment.pk} belongs to another student."]
+    elif enrollment is not None and reason in REFUND_ENROLLMENT_STATUS:
+        needed = REFUND_ENROLLMENT_STATUS[reason]
+        if enrollment.status != needed:  # D-W6: the refund follows that exit
+            errors["enrollment"] = [
+                f"{enrollment.pk} is {enrollment.status}; a {reason} refund needs a {needed} "
+                "enrollment."
+            ]
     if errors:
         raise ValidationError(errors)
+    if reason == policy.WITHDRAWAL and schedule_pct is None:  # audit: the BR-WDR-02 schedule
+        schedule_pct = withdrawal_refund_pct(enrollment.term, enrollment.withdrawal_date)
     check_business_date("requested_date", requested_date)
     if requested_date < payment.received_date:
         raise ValidationError(

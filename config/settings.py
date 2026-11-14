@@ -178,7 +178,6 @@ SPECTACULAR_SETTINGS = {
         "PaymentStatusEnum": "payments.models.Payment.Status",
         "RefundStatusEnum": "payments.models.Refund.Status",
         "RefundReasonEnum": "payments.models.Refund.Reason",
-        "RefundRequestReasonEnum": ["OVERPAYMENT"],
     },
 }
 

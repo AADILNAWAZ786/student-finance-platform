@@ -284,7 +284,10 @@ class PaymentAllocationViewSet(
             "REQUESTED / APPROVED refunds reserve); the payment's available amount (amount − "
             "net allocations − refunds not REJECTED). The figures are stored as `calculation`, "
             "the request-time audit snapshot. Platform admins and support staff may request. "
-            "reason is OVERPAYMENT (withdrawal and cancellation refunds come with Phase 5)."
+            "reason is OVERPAYMENT (default), or WITHDRAWAL / CANCELLATION with the "
+            "enrollment_id of the payment's student, WITHDRAWN / CANCELLED respectively; a "
+            "WITHDRAWAL refund records the BR-WDR-02 schedule_pct. The same caps apply to every "
+            "reason; refunds are never created automatically by a withdrawal or cancellation."
         ),
         tags=["refunds"],
         request=RefundCreateSerializer,
@@ -414,6 +417,7 @@ class RefundViewSet(
             amount=data["amount"],
             requested_date=data["requested_date"],
             reason=data["reason"],
+            enrollment=data.get("enrollment_id"),
             actor=_actor(request),
         )
         return Response(self._detail(refund.pk), status=status.HTTP_201_CREATED)

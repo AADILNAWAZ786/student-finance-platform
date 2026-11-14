@@ -9,6 +9,7 @@ class PaymentsConfig(AppConfig):
         # D-S1 / D-P4: billing reads payment data through its registry and never imports this
         # app. Registration is idempotent (ready() may run more than once).
         from billing.allocations import (
+            register_adjustment_handler,
             register_allocation_provider,
             register_payment_release_handler,
             register_student_provider,
@@ -19,3 +20,6 @@ class PaymentsConfig(AppConfig):
         register_payment_release_handler("payments", services.release_for_scholarship)  # BR-ALC-06
         register_student_provider("student_credit", "payments", services.student_unallocated_credit)
         register_student_provider("refunds", "payments", services.student_refunds)
+        # Phase 5: withdrawal / cancellation releases (BR-WDR-03 step 2) and the refund quote
+        register_adjustment_handler("payment_release", "payments", services.release_for_adjustment)
+        register_student_provider("refund_quote", "payments", services.refundable_summary)

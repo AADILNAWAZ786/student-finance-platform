@@ -39,8 +39,12 @@ DOCUMENTED_DOMAIN_ERROR_CODES: dict[str, int] = {
 #   ALLOCATION_LIMIT_REACHED (Phase 4, decision D-P13a / P4-O2): a payment has used all 99
 #   allocation IDs its frozen format allows (``ALLOC-{payment_id}-NN``, deallocations
 #   included). A state conflict: no request body can fix it.
+#   DATASET_NOT_FRESH (Phase 7, approved decision D-G6 / P7-D6): synthetic data generation
+#   runs only on fresh databases (no domain row, run or label) and has no force option. A
+#   state conflict: no request body can fix it.
 EXTENSION_DOMAIN_ERROR_CODES: dict[str, int] = {
     "ALLOCATION_LIMIT_REACHED": 409,
+    "DATASET_NOT_FRESH": 409,
 }
 
 DOMAIN_ERROR_CODES: dict[str, int] = {

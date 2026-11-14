@@ -1,0 +1,139 @@
+Phase 5 (withdrawals and cancellations): verification results
+==============================================================
+Date: 2026-11-14. Every result below was produced by running the real project.
+Base: the Phase 4 code as merged and pushed to github.com/AADILNAWAZ786/student-finance-platform
+(main, commit fb4c4978f1161c6e21fde81c6ec61bbfa3eec396); a clean clone of that commit was the
+comparison base for the delta (identical except .gitignore, which is not part of this delta).
+Approved plan: the Phase 5 plan with decisions D-W1 (Option A), D-W2, D-W3, D-W4, D-W5
+(Option B), D-W6, D-W7, D-W8, D-W9 (see docs/KNOWN_LIMITATIONS.md, "Phase 5 policy decisions").
+Frozen docs (ARCHITECTURE.md, DATABASE_DESIGN.md v1.1) and every migration file are unchanged.
+students/ code is unchanged. No new dependency.
+
+Environments: Python 3.14.6 (required; pinned requirements.txt: Django 5.2.19, DRF 3.18.3,
+drf-spectacular 0.30.0, pytest 9.2.0, ruff 0.17.4) and Python 3.12.3 (additional).
+
+1. Project checks (Python 3.14.6)
+---------------------------------
+manage.py check                                   System check identified no issues (0 silenced).
+manage.py makemigrations --check --dry-run        No changes detected
+manage.py spectacular --validate --fail-on-warn   exit 0, no warnings (52 operations, +2)
+ruff check . / ruff format --check . (0.17.4)     All checks passed! / 199 files already formatted
+(manage.py ran with scratch settings pointing both databases at /tmp; see section 9.)
+
+2. Migrations
+-------------
+None. Phase 5 adds no model, field or constraint: every row it writes (ADJUSTMENT invoice
+lines and ledger entries, scholarship REVERSE rows, payment DEALLOCATE rows, enrollment,
+invoice and scholarship events) uses the Phase 1-4 tables and the enum values the frozen
+design already defines (WITHDRAWAL_RELEASE, CANCELLATION_RELEASE, adjustment / reversal
+reasons WITHDRAWAL and CANCELLATION, invoice lifecycle CANCELLED, ENROLLMENT_CANCELLED).
+tests/verification/test_verify_withdrawals.py::test_phase5_needs_no_migration checks it.
+
+3. Full regression, Phases 0-5
+------------------------------
+Command (README "Tests and quality"; every tests/ directory plus every runnable tests/unit file,
+i.e. all but test_stage_rng.py, which needs the Phase 7 datagen module):
+    Python 3.14.6   2232 passed, 2 xfailed in 133.49s
+    Python 3.12.3   2232 passed, 2 xfailed in 137.86s
+Baseline (Phase 4 merged): 2108 passed, 2 xfailed. +124 tests, none removed or skipped.
+XFAIL (strict, unchanged): test_design_learner_reads_own_record (L1),
+    test_design_instructor_reads_enrollments_of_own_program (L2).
+
+4. The three frozen Phase 5 exit tests (ARCHITECTURE §14; unchanged files)
+--------------------------------------------------------------------------
+tests/unit/test_withdrawal_refund_pct.py     8 passed
+tests/unit/test_withdrawal_release.py       11 passed
+tests/unit/test_worked_example.py            3 passed
+    (22 passed in 0.08s; all three were un-importable before Phase 5)
+
+5. New Phase 5 tests
+--------------------
+tests/unit/test_withdrawal_calculators.py           14  schedule bands and boundaries, adjustment
+                                                        builders (current net, D-W3), release
+                                                        plans, split_reversal (D-W4) exactness
+tests/services/test_services_withdrawals.py         36  bands, census, every date rule (D-W8),
+                                                        release order (scholarship then LIFO
+                                                        payments), the D-W4 split (75,000 +
+                                                        20,000 -> 45,000 / 12,000), full ride,
+                                                        cancellation effects, D-W7, D-W9,
+                                                        rollback at 5 failure points,
+                                                        ALLOCATION_LIMIT_REACHED before any write,
+                                                        append-only, repeated exit -> 409
+tests/services/test_concurrency_withdrawals.py       5  real threads: withdraw x withdraw,
+                                                        withdraw x cancel, withdraw x payment
+                                                        allocation, withdraw x scholarship
+                                                        application, withdraw x refund request
+                                                        (8 consecutive green runs)
+tests/api/test_api_withdrawals.py                   18  responses validated against the served
+                                                        schema; D-W5 visibility (academic_admin
+                                                        body has no invoice / refund_quote key
+                                                        and no amount anywhere); 403 for
+                                                        support_staff / instructor / learner on
+                                                        both actions with nothing written; 401;
+                                                        strict input; enveloped errors; D-W6
+                                                        refunds through the API
+tests/verification/test_verify_withdrawals.py        5  no migration; schedule at every boundary;
+                                                        same scenario -> identical rows; zero
+                                                        queries on ground_truth; every financial
+                                                        invariant after 9 exits (8 withdrawals
+                                                        across all bands, 1 cancellation)
+tests/services/test_services_refunds.py             +1  §7 Stages B-C through
+                                                        academics.withdraw_enrollment: the frozen
+                                                        Stage B table (A, R = 51,600, excess
+                                                        44,400 / 7,200, LIFO deallocations), then
+                                                        WITHDRAWAL refunds 34,200 + 30,400,
+                                                        ledger 0, 14 entries
+tests/architecture/test_app_dependencies.py         +1  D-W1: academics imports none of billing /
+                                                        scholarships / payments; registries hold
+                                                        the handlers
+tests/verification/test_verify_openapi_examples.py      withdraw / cancel operations and every
+tests/verification/test_verify_routes.py                documented example replayed; 2 new routes
+
+6. Existing tests changed (the approved scope changes their expectation)
+------------------------------------------------------------------------
+tests/unit/test_billing_calculators.py   the D12 placeholder asserted release_for_adjustment did
+                                         not exist; renamed
+                                         test_release_for_adjustment_arrived_in_phase_5 (P5-O7)
+tests/services/test_services_payments.py registry listing gains refund_quote and the two
+                                         adjustment handlers
+tests/services/test_services_refunds.py  WITHDRAWAL refund needs a WITHDRAWN enrollment (D-W6):
+                                         an ENROLLED one is now refused, then accepted after
+                                         withdrawal
+tests/api/test_api_payments.py           test_refund_errors: WITHDRAWAL without enrollment_id ->
+                                         400 enrollment_id; GOODWILL still an invalid choice
+tests/verification/test_verify_openapi_examples.py, test_verify_routes.py
+                                         new operations, recipes and counts; the Phase 4
+                                         "WITHDRAWAL refused" refund example replaced by the
+                                         D-W6 examples
+tests/architecture/test_app_dependencies.py
+                                         docstring: D-S17 resolved (graph unchanged)
+
+7. Conflicts and observations for the owner (details: KNOWN_LIMITATIONS "Phase 5 observations")
+-----------------------------------------------------------------------------------------------
+P5-O1 invoice_amounts().payments_by_payer now lists only payers with allocations, because the
+      frozen test_worked_example.py expects that; Phase 2 listed all three. API output unchanged.
+P5-O2 An exit may not predate a line it adjusts (400). Narrow; D-W8 otherwise applied as approved.
+P5-O3 The exit-path scholarship reversal bounds its date by each allocation's allocated_on, not
+      Phase 3's latest-invoice-date rule (which reverse_allocation keeps).
+P5-O4 Superusers see financial details like platform_admin.
+P5-O5 A WITHDRAWAL / CANCELLATION refund's requested_date is not tied to the exit date.
+P5-O6 OpenAPI component RefundRequestReasonEnum removed; RefundReasonEnum (3 values) used.
+Defects found and fixed before delivery: P5-B1 (adjustment builder KeyError), P5-B2 (academic
+admin received "invoice": null / "refund_quote": null: keys now absent).
+
+8. Financial invariants checked after exits (test_verify_withdrawals, services, concurrency)
+------------------------------------------------------------------------------------------
+BR-WDR-01  cancelled: every line but REGISTRATION nets to 0; invoice CANCELLED; one event
+BR-WDR-02  each refundable line: one ADJUSTMENT = -round_half_up(N x pct), dated the exit
+BR-WDR-03  no line over-covered after release; releases dated the exit with the right rule
+BR-SCH-07  sum of reversals <= original per scholarship allocation
+BR-ALC-01/05  every payment's available >= 0; sum of deallocations <= original, same line
+BR-LED-01  one ADJUSTMENT ledger entry per adjustment line (same amount, date, student)
+BR-BAL-02  identity holds per student; reconciliation.balance_from_ledger = billing ledger sum
+Append-only: every pre-existing line unchanged; the same scenario twice gives identical rows.
+
+9. Local databases (never opened)
+---------------------------------
+sha256 before and after all work:
+    db.sqlite3            131174b33fc0a6df0025740dfe5d8dfb98d33ed4aca911adfc9ad26d3f52d02f
+    ground_truth.sqlite3  ca449c7ee9f0ee09d417cd67d24185ede097e359e2ab8709a965bf178a2dee20

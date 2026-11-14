@@ -240,6 +240,7 @@ def test_void_adjustments_cover_the_remaining_net_of_each_line():
     assert set(remaining.values()) == {D("0.00")}
 
 
-def test_release_for_adjustment_is_not_implemented_yet():
-    """D12: BR-WDR-03 belongs to Phase 5."""
-    assert not hasattr(calc, "release_for_adjustment")
+def test_release_for_adjustment_arrived_in_phase_5():
+    """D12: BR-WDR-03 belonged to Phase 5, which implemented it (frozen contract tested in
+    tests/unit/test_withdrawal_release.py)."""
+    assert callable(calc.release_for_adjustment)
