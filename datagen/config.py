@@ -27,18 +27,37 @@ class ConfigError(ValueError):
     """The requested scale or the config file is invalid."""
 
 
-def load_raw(path: Path | None = None) -> dict:
-    with open(path or CONFIG_PATH, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+def load_raw(path: Path | str | None = None) -> dict:
+    """The raw YAML config (``config/generation.yaml`` unless ``path`` is given)."""
+    path = Path(path) if path else CONFIG_PATH
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh)
+    except FileNotFoundError:
+        raise ConfigError(f"config file not found: {path}") from None
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"{path} is not valid YAML: {exc}") from None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{path}: the top level must be a mapping")
+    return raw
 
 
 def _scaled(full: int, factor: Decimal) -> int:
     return int((Decimal(full) * factor).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
-def resolve(*, scale: str | None = "starter", scale_factor=None, raw: dict | None = None) -> dict:
+def resolve(
+    *, scale: str | None = "starter", scale_factor=None, raw: dict | None = None, path=None
+) -> dict:
     """The resolved config for ``scale`` (``starter`` / ``full``) or an explicit factor."""
-    raw = copy.deepcopy(raw if raw is not None else load_raw())
+    raw = copy.deepcopy(raw if raw is not None else load_raw(path))
+    from datagen.config_schema import check  # noqa: PLC0415 - schema imports domain policies
+
+    problems = check(raw)
+    if problems:
+        raise ConfigError(
+            f"invalid generation config ({len(problems)} problem(s)):\n  " + "\n  ".join(problems)
+        )
     if scale_factor is not None:
         factor = Decimal(str(scale_factor))
         name = next((n for n in SCALE_NAMES if Decimal(str(raw["scales"][n])) == factor), "custom")
